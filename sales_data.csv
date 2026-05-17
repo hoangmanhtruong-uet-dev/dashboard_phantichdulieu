@@ -1,0 +1,21 @@
+OrderDate,CustomerID,Product,Category,Amount,Rating,Review,Region
+2026-01-01,C001,iPhone 15,Electronics,25000000,5,Sản phẩm tuyệt vời!,Hà Nội
+2026-01-02,C002,MacBook M3,Electronics,45000000,5,Rất đáng tiền.,TP.HCM
+2026-01-05,C003,Samsung S24,Electronics,22000000,4,Dùng tốt nhưng pin hơi yếu.,Đà Nẵng
+2026-01-10,C001,AirPods Pro,Accessories,6000000,5,Âm thanh hay.,Hà Nội
+2026-01-15,C004,Logitech Mouse,Accessories,1500000,3,Hơi ồn khi click.,Hải Phòng
+2026-01-20,C005,Dell XPS,Electronics,38000000,2,Máy hay bị nóng quá mức.,Cần Thơ
+2026-02-01,C001,iPhone 15,Electronics,25000000,5,Mua thêm cho người thân.,Hà Nội
+2026-02-05,C006,Keychron K2,Accessories,2500000,5,Gõ rất sướng.,TP.HCM
+2026-02-10,C002,iPad Pro,Electronics,28000000,4,Màn hình đẹp.,TP.HCM
+2026-02-15,C007,Sony WH-1000XM5,Accessories,8000000,5,Chống ồn đỉnh cao.,Hà Nội
+2026-03-01,C003,Case iPhone,Accessories,500000,5,Đẹp và bền.,Đà Nẵng
+2026-03-05,C008,Asus ROG,Electronics,42000000,1,Vừa mua đã hỏng main.,Hải Phòng
+2026-03-10,C001,MacBook M3,Electronics,45000000,5,Khách hàng trung thành.,Hà Nội
+2026-03-15,C004,Mechanical Keyboard,Accessories,3000000,4,Led đẹp.,Hải Phòng
+2026-03-20,C009,HP Spectre,Electronics,35000000,5,Mỏng nhẹ sang trọng.,TP.HCM
+2026-04-01,C010,Gaming Chair,Furniture,7000000,4,Ngồi êm.,Đà Nẵng
+2026-04-05,C002,iPhone 15,Electronics,25000000,5,Tuyệt.,TP.HCM
+2026-04-10,C005,Cooling Pad,Accessories,800000,5,Giải quyết được vấn đề nóng máy.,Cần Thơ
+2026-04-15,C011,Electric Desk,Furniture,12000000,5,Rất chắc chắn.,Hà Nội
+2026-05-01,C012,Office Chair,Furniture,4000000,3,Lắp ráp hơi khó.,Hải Phòng
