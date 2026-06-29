@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List
 import pandas as pd
@@ -14,7 +17,8 @@ try:
 except ImportError:
     genai = None
 
-DB_FILE = 'sales.db'
+BASE_DIR = Path(__file__).resolve().parent
+DB_FILE = BASE_DIR / 'sales.db'
 
 app = FastAPI(title="DataInsight AI Service")
 
@@ -148,10 +152,26 @@ async def check_anomalies():
         print(f"Anomaly Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/")
+async def serve_index():
+    return FileResponse(BASE_DIR / "index.html")
+
+@app.get("/{filename}")
+async def serve_static_file(filename: str):
+    allowed_files = {"index.html", "style.css", "app.js", "sales_data.csv", "sample_data.csv"}
+    if filename not in allowed_files:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    file_path = BASE_DIR / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Not found")
+
+    return FileResponse(file_path)
+
 @app.post("/api/chat")
 async def chat_with_gemini(req: ChatRequest):
     try:
-        api_key = "AIzaSyDzoPHK9wkd00oW89U5aBBi24Wh8Luqji0"
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key or not genai:
             return {
                 "status": "success", 
@@ -169,5 +189,5 @@ async def chat_with_gemini(req: ChatRequest):
         return {"status": "error", "reply": "Lỗi kết nối Gemini AI. Chi tiết: " + str(e)}
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
-
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

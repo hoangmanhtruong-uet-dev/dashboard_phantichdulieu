@@ -1,5 +1,5 @@
 // CONFIGURATION: DIRECT CONNECTION TO AI BACKEND
-const AI_SERVICE_URL = "http://127.0.0.1:8000"; // Dùng 127.0.0.1 thay vì localhost để tránh lỗi DNS
+const AI_SERVICE_URL = window.location.protocol === "file:" ? "http://127.0.0.1:8000" : "";
 
 let forecastChart = null;
 let segmentChart = null;
@@ -1842,4 +1842,3 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 1000); // Chờ DOM render xong biểu đồ
 });
-
