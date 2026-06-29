@@ -697,14 +697,38 @@ function getProductImage(product, category) {
 }
 
 function processFile(file) {
+    if (!window.Papa) {
+        showToast('Chua tai duoc thu vien doc CSV. Hay refresh trang roi thu lai.', 'error', 'ph-warning');
+        return;
+    }
+
+    showToast(`Dang doc file ${file.name}...`, 'info', 'ph-file-csv');
+
     Papa.parse(file, {
         header: true, dynamicTyping: true, skipEmptyLines: true,
         complete: function(results) {
-            if (results.data?.length > 0) {
-                currentData = results.data;
-                columns = results.meta.fields;
-                initDashboard();
+            if (results.errors?.length) {
+                console.warn('CSV parse errors:', results.errors);
             }
+
+            const rows = (results.data || []).filter(row =>
+                row && Object.values(row).some(value => value !== null && value !== undefined && String(value).trim() !== '')
+            );
+            const fields = (results.meta.fields || []).filter(Boolean);
+
+            if (!rows.length || !fields.length) {
+                showToast('File CSV rong hoac khong co dong tieu de hop le.', 'error', 'ph-warning');
+                return;
+            }
+
+            currentData = rows;
+            columns = fields;
+            initDashboard();
+            showToast(`Da nap ${rows.length.toLocaleString('vi-VN')} dong du lieu.`, 'success', 'ph-check-circle');
+        },
+        error: function(error) {
+            console.error('CSV parse failed:', error);
+            showToast('Khong doc duoc file CSV. Hay kiem tra dinh dang file.', 'error', 'ph-warning');
         }
     });
 }
@@ -723,7 +747,12 @@ function initDashboard() {
             populateCategoryFilter();
             populateFilterChips();
             filteredData = [...currentData];
-            runAIAnalytics();
+            try {
+                runAIAnalytics();
+            } catch (err) {
+                console.error('Analytics render failed:', err);
+                showToast('Da nap du lieu, nhung bieu do chua san sang. Hay refresh neu can.', 'error', 'ph-chart-line');
+            }
             applyFilters();
         } finally {
             if (loader) loader.classList.add('hidden');
@@ -1244,6 +1273,10 @@ function updateActivityKPIs(rev, fore, segments) {
 function updateForecastChart(history, forecast) {
     const ctx = document.getElementById('forecastChart');
     if (!ctx) return;
+    if (!window.Chart) {
+        console.warn('Chart.js is not loaded; skipping forecast chart.');
+        return;
+    }
     if (forecastChart) forecastChart.destroy();
     forecastChart = new Chart(ctx, {
         type: 'line',
@@ -1255,6 +1288,10 @@ function updateForecastChart(history, forecast) {
 function updateSegmentChart(segments) {
     const ctx = document.getElementById('segmentChart');
     if (!ctx) return;
+    if (!window.Chart) {
+        console.warn('Chart.js is not loaded; skipping segment chart.');
+        return;
+    }
     if (segmentChart) segmentChart.destroy();
     segmentChart = new Chart(ctx, {
         type: 'doughnut',

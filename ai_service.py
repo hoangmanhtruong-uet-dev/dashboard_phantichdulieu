@@ -2,11 +2,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from typing import List
 import pandas as pd
-from prophet import Prophet
 from sklearn.cluster import KMeans
 import uvicorn
 import sqlite3
@@ -47,6 +46,8 @@ class ChatRequest(BaseModel):
 async def forecast_sales(data: List[SalesData]):
     try:
         if not data: return {"status": "empty", "forecast": []}
+        from prophet import Prophet
+
         df = pd.DataFrame([item.dict() for item in data])
         
         # Prophet model
@@ -155,6 +156,14 @@ async def check_anomalies():
 @app.get("/")
 async def serve_index():
     return FileResponse(BASE_DIR / "index.html")
+
+@app.head("/")
+async def head_index():
+    return Response(status_code=200)
+
+@app.get("/favicon.ico")
+async def favicon():
+    return Response(status_code=204)
 
 @app.get("/{filename}")
 async def serve_static_file(filename: str):
