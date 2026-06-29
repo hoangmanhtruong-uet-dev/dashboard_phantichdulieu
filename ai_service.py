@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from typing import List
+import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
 import uvicorn
@@ -46,20 +47,44 @@ class ChatRequest(BaseModel):
 async def forecast_sales(data: List[SalesData]):
     try:
         if not data: return {"status": "empty", "forecast": []}
-        from prophet import Prophet
-
         df = pd.DataFrame([item.dict() for item in data])
-        
-        # Prophet model
-        model = Prophet(yearly_seasonality=True, daily_seasonality=False, weekly_seasonality=True)
-        model.fit(df)
-        
-        future = model.make_future_dataframe(periods=6, freq='ME') # 'ME' for Month End
-        forecast = model.predict(future)
-        
-        result = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(6)
-        result['ds'] = result['ds'].dt.strftime('%Y-%m') # Format date to YYYY-MM
-        return {"status": "success", "forecast": result.to_dict('records')}
+        df["ds"] = pd.to_datetime(df["ds"], errors="coerce")
+        df["y"] = pd.to_numeric(df["y"], errors="coerce")
+        df = df.dropna(subset=["ds", "y"]).sort_values("ds")
+
+        if df.empty:
+            return {"status": "empty", "forecast": []}
+
+        monthly = df.set_index("ds")["y"].resample("MS").sum()
+        monthly = monthly[monthly > 0]
+
+        if monthly.empty:
+            return {"status": "empty", "forecast": []}
+
+        values = monthly.to_numpy(dtype=float)
+        x = np.arange(len(values))
+
+        if len(values) >= 2:
+            slope, intercept = np.polyfit(x, values, 1)
+        else:
+            slope, intercept = 0.0, values[0]
+
+        residuals = values - (slope * x + intercept)
+        spread = float(np.std(residuals)) if len(values) > 2 else float(values[-1] * 0.1)
+        last_month = monthly.index[-1]
+
+        forecast = []
+        for step in range(1, 7):
+            yhat = max(0.0, float(slope * (len(values) + step - 1) + intercept))
+            date = last_month + pd.DateOffset(months=step)
+            forecast.append({
+                "ds": date.strftime("%Y-%m"),
+                "yhat": yhat,
+                "yhat_lower": max(0.0, yhat - spread),
+                "yhat_upper": yhat + spread,
+            })
+
+        return {"status": "success", "forecast": forecast}
     except Exception as e:
         print(f"Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

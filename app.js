@@ -307,7 +307,7 @@ function updateAIStatusBadge(state) {
     }
     const configs = {
         checking: { bg: 'rgba(30,30,50,0.92)', border: '#6366f1', dot: '#a5b4fc', text: '⚙ Đang kiểm tra AI...' },
-        online:   { bg: 'rgba(16,40,30,0.92)', border: '#10b981', dot: '#34d399', text: '● AI Prophet Online' },
+        online:   { bg: 'rgba(16,40,30,0.92)', border: '#10b981', dot: '#34d399', text: '● AI Forecast Online' },
         offline:  { bg: 'rgba(40,16,16,0.92)', border: '#ef4444', dot: '#f87171', text: '● Mô phỏng nội bộ' }
     };
     const cfg = configs[state] || configs.offline;
@@ -316,7 +316,7 @@ function updateAIStatusBadge(state) {
     badge.style.color = cfg.dot;
     badge.innerHTML = `<span style="font-size:10px">${cfg.text}</span>`;
     badge.title = state === 'online'
-        ? 'AI Backend (Python/Prophet) đang hoạt động'
+        ? 'AI Backend đang hoạt động'
         : 'Đang dùng dự báo tuyến tính nội bộ (không cần server)';
 }
 
@@ -351,7 +351,7 @@ async function renderDeepForecastWithAI() {
     const apiData = monthlySales.map(m => ({ ds: m.month + "-01", y: parseFloat(m.total) }));
 
     if (isAIConnected) {
-        showToast('AI Prophet đang phân tích xu hướng...', 'info', 'ph-sparkle');
+        showToast('AI đang phân tích xu hướng...', 'info', 'ph-sparkle');
         try {
             const result = await fetchWithRetry(`${AI_SERVICE_URL}/forecast`, {
                 method: 'POST',
@@ -361,7 +361,7 @@ async function renderDeepForecastWithAI() {
             });
             if (result.status === 'success') {
                 renderForecastChartDeep(monthlySales, result.forecast);
-                showToast('AI Prophet dự báo hoàn tất!', 'success', 'ph-check');
+                showToast('AI dự báo hoàn tất!', 'success', 'ph-check');
                 return;
             }
         } catch (err) {
@@ -430,7 +430,7 @@ function renderForecastChartDeep(history, forecast) {
                     tension: 0.4
                 },
                 { 
-                    label: 'Dự báo từ AI Prophet', 
+                    label: 'Dự báo từ AI', 
                     data: labels.map((l, i) => i >= history.length ? forecast[i-history.length].yhat : null), 
                     borderColor: '#06b6d4', 
                     borderDash: [5, 5],
@@ -1746,7 +1746,7 @@ function renderActivityCharts() {
             <div style="display:flex; gap:12px; margin-bottom:12px; align-items:flex-start;">
                 <div style="width:32px; height:32px; border-radius:50%; background:rgba(99,102,241,0.1); color:#6366f1; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i class="ph-fill ph-robot"></i></div>
                 <div>
-                    <p style="margin:0; font-size:0.9rem; color:#e2e8f0;"><strong>AI Prophet</strong> hoàn tất phân tích dự báo</p>
+                    <p style="margin:0; font-size:0.9rem; color:#e2e8f0;"><strong>AI Forecast</strong> hoàn tất phân tích dự báo</p>
                     <span style="font-size:0.75rem; color:#94a3b8;">2 phút trước</span>
                 </div>
             </div>
