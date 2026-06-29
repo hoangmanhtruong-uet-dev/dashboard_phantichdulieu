@@ -1,113 +1,167 @@
+from calendar import monthrange
+from datetime import datetime
 from pathlib import Path
+import os
+import sqlite3
+from typing import List
 
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
-from typing import List
-import numpy as np
-import pandas as pd
-from sklearn.cluster import KMeans
-import uvicorn
-import sqlite3
-from datetime import datetime, timedelta
-import os
-try:
-    import google.generativeai as genai
-except ImportError:
-    genai = None
+
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_FILE = BASE_DIR / 'sales.db'
+DB_FILE = BASE_DIR / "sales.db"
 
 app = FastAPI(title="DataInsight AI Service")
 
-# CẤU HÌNH CORS: Cho phép Frontend truy cập vào AI Backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Cho phép tất cả các nguồn (local file, localhost, v.v.)
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 class SalesData(BaseModel):
-    ds: str # Date
-    y: float # Value
+    ds: str
+    y: float
+
 
 class CustomerData(BaseModel):
     id: str
     frequency: int
     monetary: float
 
+
 class ChatRequest(BaseModel):
     message: str
+
+
+def parse_date(value: str):
+    text = str(value or "").strip()
+    for fmt in ("%Y-%m-%d", "%Y-%m-%d %H:%M:%S", "%Y/%m/%d", "%d/%m/%Y", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(text[:19], fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def add_months(date: datetime, months: int):
+    month_index = date.month - 1 + months
+    year = date.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(date.day, monthrange(year, month)[1])
+    return date.replace(year=year, month=month, day=day)
+
 
 @app.post("/forecast")
 async def forecast_sales(data: List[SalesData]):
     try:
-        if not data: return {"status": "empty", "forecast": []}
-        df = pd.DataFrame([item.dict() for item in data])
-        df["ds"] = pd.to_datetime(df["ds"], errors="coerce")
-        df["y"] = pd.to_numeric(df["y"], errors="coerce")
-        df = df.dropna(subset=["ds", "y"]).sort_values("ds")
-
-        if df.empty:
+        if not data:
             return {"status": "empty", "forecast": []}
 
-        monthly = df.set_index("ds")["y"].resample("MS").sum()
-        monthly = monthly[monthly > 0]
+        monthly_totals = {}
+        for item in data:
+            date = parse_date(item.ds)
+            if not date:
+                continue
+            month_key = date.strftime("%Y-%m")
+            monthly_totals[month_key] = monthly_totals.get(month_key, 0.0) + float(item.y or 0)
 
-        if monthly.empty:
+        if not monthly_totals:
             return {"status": "empty", "forecast": []}
 
-        values = monthly.to_numpy(dtype=float)
-        x = np.arange(len(values))
+        months = sorted(monthly_totals)
+        values = [monthly_totals[month] for month in months]
+        count = len(values)
 
-        if len(values) >= 2:
-            slope, intercept = np.polyfit(x, values, 1)
+        if count >= 2:
+            x_mean = (count - 1) / 2
+            y_mean = sum(values) / count
+            denominator = sum((index - x_mean) ** 2 for index in range(count)) or 1
+            slope = sum((index - x_mean) * (values[index] - y_mean) for index in range(count)) / denominator
+            intercept = y_mean - slope * x_mean
         else:
-            slope, intercept = 0.0, values[0]
+            slope = 0.0
+            intercept = values[0]
 
-        residuals = values - (slope * x + intercept)
-        spread = float(np.std(residuals)) if len(values) > 2 else float(values[-1] * 0.1)
-        last_month = monthly.index[-1]
+        predicted_history = [slope * index + intercept for index in range(count)]
+        residuals = [values[index] - predicted_history[index] for index in range(count)]
+        if len(residuals) > 2:
+            avg_residual = sum(residuals) / len(residuals)
+            spread = (sum((r - avg_residual) ** 2 for r in residuals) / len(residuals)) ** 0.5
+        else:
+            spread = abs(values[-1]) * 0.1
 
+        last_month = datetime.strptime(months[-1] + "-01", "%Y-%m-%d")
         forecast = []
         for step in range(1, 7):
-            yhat = max(0.0, float(slope * (len(values) + step - 1) + intercept))
-            date = last_month + pd.DateOffset(months=step)
-            forecast.append({
-                "ds": date.strftime("%Y-%m"),
-                "yhat": yhat,
-                "yhat_lower": max(0.0, yhat - spread),
-                "yhat_upper": yhat + spread,
-            })
+            yhat = max(0.0, float(slope * (count + step - 1) + intercept))
+            date = add_months(last_month, step)
+            forecast.append(
+                {
+                    "ds": date.strftime("%Y-%m"),
+                    "yhat": yhat,
+                    "yhat_lower": max(0.0, yhat - spread),
+                    "yhat_upper": yhat + spread,
+                }
+            )
 
         return {"status": "success", "forecast": forecast}
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        print(f"Forecast error: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 @app.post("/cluster")
 async def cluster_customers(data: List[CustomerData]):
     try:
-        if not data: return {"status": "empty", "clusters": []}
-        df = pd.DataFrame([item.dict() for item in data])
-        
-        # K-Means clustering
-        X = df[['frequency', 'monetary']]
-        n_clusters = min(len(df), 4) # Tránh lỗi nếu dữ liệu quá ít
-        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-        df['cluster'] = kmeans.fit_predict(X)
-        
-        return {"status": "success", "clusters": df.to_dict('records')}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        if not data:
+            return {"status": "empty", "clusters": []}
+
+        max_frequency = max(max(0, int(item.frequency or 0)) for item in data) or 1
+        max_monetary = max(max(0.0, float(item.monetary or 0)) for item in data) or 1
+
+        clusters = []
+        for item in data:
+            frequency = max(0, int(item.frequency or 0))
+            monetary = max(0.0, float(item.monetary or 0))
+            score = (frequency / max_frequency) * 0.45 + (monetary / max_monetary) * 0.55
+            if score >= 0.75:
+                cluster = 0
+            elif score >= 0.5:
+                cluster = 1
+            elif score >= 0.25:
+                cluster = 2
+            else:
+                cluster = 3
+
+            clusters.append(
+                {
+                    "id": str(item.id),
+                    "frequency": frequency,
+                    "monetary": monetary,
+                    "cluster": cluster,
+                }
+            )
+
+        return {"status": "success", "clusters": clusters}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "service": "DataInsight AI"}
+
 
 @app.get("/api/sales/realtime")
 async def get_realtime_sales():
@@ -118,77 +172,89 @@ async def get_realtime_sales():
         if not cursor.fetchone():
             conn.close()
             return {"status": "empty", "data": []}
-            
-        cursor.execute("SELECT order_id, customer_id, category, region, amount, order_date FROM orders ORDER BY order_date DESC LIMIT 1000")
+
+        cursor.execute(
+            "SELECT order_id, customer_id, category, region, amount, order_date "
+            "FROM orders ORDER BY order_date DESC LIMIT 1000"
+        )
         rows = cursor.fetchall()
-        
-        data = []
-        for row in rows:
-            data.append({
+        conn.close()
+
+        data = [
+            {
                 "OrderID": row[0],
                 "CustomerID": row[1],
                 "Category": row[2],
                 "Region": row[3],
                 "Amount": row[4],
-                "OrderDate": row[5]
-            })
-        conn.close()
+                "OrderDate": row[5],
+            }
+            for row in rows
+        ]
         return {"status": "success", "data": data}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 @app.get("/api/anomalies")
 async def check_anomalies():
     try:
         conn = sqlite3.connect(DB_FILE)
-        # Handle case where table might not exist
         cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='orders'")
         if not cursor.fetchone():
             conn.close()
             return {"status": "success", "anomaly": False, "message": "No data"}
-            
-        df = pd.read_sql_query("SELECT * FROM orders ORDER BY order_date DESC LIMIT 500", conn)
+
+        cursor.execute("SELECT region, amount FROM orders ORDER BY order_date DESC LIMIT 500")
+        rows = cursor.fetchall()
         conn.close()
-        
-        if df.empty or len(df) < 50:
+
+        if len(rows) < 50:
             return {"status": "success", "anomaly": False, "message": "Not enough data"}
-            
-        recent_10 = df.head(10)
-        baseline = df.iloc[10:]
-        
-        for region in df['region'].unique():
-            recent_avg = recent_10[recent_10['region'] == region]['amount'].mean()
-            baseline_avg = baseline[baseline['region'] == region]['amount'].mean()
-            
-            if pd.isna(recent_avg) or pd.isna(baseline_avg) or baseline_avg == 0: continue
-                
-            if recent_avg < baseline_avg * 0.8: # Drop by 20%
+
+        recent_10 = rows[:10]
+        baseline = rows[10:]
+        regions = {region for region, _ in rows if region}
+
+        for region in regions:
+            recent_values = [float(amount or 0) for row_region, amount in recent_10 if row_region == region]
+            baseline_values = [float(amount or 0) for row_region, amount in baseline if row_region == region]
+            if not recent_values or not baseline_values:
+                continue
+
+            recent_avg = sum(recent_values) / len(recent_values)
+            baseline_avg = sum(baseline_values) / len(baseline_values)
+            if baseline_avg and recent_avg < baseline_avg * 0.8:
                 drop_pct = (1 - recent_avg / baseline_avg) * 100
                 return {
                     "status": "success",
-                    "anomaly": True, 
-                    "message": f"Cảnh báo: Doanh thu vùng {region} giảm đột ngột {drop_pct:.1f}%!",
+                    "anomaly": True,
+                    "message": f"Canh bao: Doanh thu vung {region} giam dot ngot {drop_pct:.1f}%!",
                     "region": region,
-                    "drop_pct": drop_pct
+                    "drop_pct": drop_pct,
                 }
-                
+
         return {"status": "success", "anomaly": False, "message": "Normal"}
-    except Exception as e:
-        print(f"Anomaly Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as exc:
+        print(f"Anomaly error: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 @app.get("/")
 async def serve_index():
     return FileResponse(BASE_DIR / "index.html")
 
+
 @app.head("/")
 async def head_index():
     return Response(status_code=200)
 
+
 @app.get("/favicon.ico")
 async def favicon():
     return Response(status_code=204)
+
 
 @app.get("/{filename}")
 async def serve_static_file(filename: str):
@@ -202,25 +268,14 @@ async def serve_static_file(filename: str):
 
     return FileResponse(file_path)
 
+
 @app.post("/api/chat")
 async def chat_with_gemini(req: ChatRequest):
-    try:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key or not genai:
-            return {
-                "status": "success", 
-                "reply": f"Tôi đang phân tích yêu cầu: '{req.message}'.\n(Đây là phản hồi mô phỏng. Vui lòng `pip install google-generativeai` và set biến môi trường `GEMINI_API_KEY` ở backend để dùng AI thật)."
-            }
-            
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
-        prompt = f"Bạn là trợ lý phân tích dữ liệu DataInsight. Trả lời ngắn gọn, chuyên nghiệp bằng tiếng Việt: {req.message}"
-        response = model.generate_content(prompt)
-        
-        return {"status": "success", "reply": response.text}
-    except Exception as e:
-        print(f"Chat Error: {str(e)}")
-        return {"status": "error", "reply": "Lỗi kết nối Gemini AI. Chi tiết: " + str(e)}
+    return {
+        "status": "success",
+        "reply": f"Toi da nhan yeu cau: '{req.message}'. Ban Render free dang dung che do AI mo phong nhe de tiet kiem RAM.",
+    }
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
