@@ -8,3 +8,19 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: APP_ENV
+        value: staging
+      - key: DATABASE_PATH
+        value: ./sales.db
+      - key: SEED_DEMO_DATA
+        value: "false"
+      - key: UPLOAD_DIR
+        value: ./data/uploads
+      - key: MAX_UPLOAD_BYTES
+        value: "10485760"
+      - key: MAX_IMPORT_ROWS
+        value: "100000"
+      - key: MAX_IMPORT_COLUMNS
+        value: "100"
+      - key: JWT_SECRET
+        generateValue: true

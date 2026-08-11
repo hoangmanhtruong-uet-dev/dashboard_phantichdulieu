@@ -1,2 +1,17 @@
 __pycache__/
 *.pyc
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.coverage
+htmlcov/
+*.db-shm
+*.db-wal
+*.db-journal
+uploads/
+data/uploads/
+node_modules/
+dist/
+.mypy_cache/
+.ruff_cache/

@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "CommonJS",
+    "lib": ["ES2022", "DOM"],
+    "skipLibCheck": true,
+    "strict": false
+  },
+  "include": ["frontend/resource-state.js", "frontend/api-client.js"]
+}

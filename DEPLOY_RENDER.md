@@ -1,31 +1,37 @@
-# Deploy len Render
+# Deploy Nexus Analytics to Render
 
-Du an nay deploy len Render bang mot Python Web Service. FastAPI se phuc vu ca backend API va giao dien `index.html`.
+FastAPI serves both the static frontend and the API. The compatibility entrypoint remains `ai_service:app`.
 
-## Cach 1: Dung Blueprint
+## Blueprint
 
-1. Day code len GitHub.
-2. Vao Render, chon **New +** > **Blueprint**.
-3. Chon repository cua du an.
-4. Render se doc file `render.yaml` va tao service `datainsight-dashboard`.
-5. Neu muon dung Gemini that, them gia tri cho bien moi truong `GEMINI_API_KEY`.
-6. Bam **Apply** de build va deploy.
+1. Push the repository to GitHub.
+2. In Render choose **New + → Blueprint**.
+3. Select the repository and apply `render.yaml`.
+4. Confirm the health endpoint at `/health` and API documentation at `/docs`.
 
-## Cach 2: Tao Web Service thu cong
+## Manual Web Service
 
-1. Vao Render, chon **New +** > **Web Service**.
-2. Chon repository cua du an.
-3. Cau hinh:
-   - Runtime: `Python`
-   - Build Command: `pip install -r requirements.txt`
-   - Start Command: `uvicorn ai_service:app --host 0.0.0.0 --port $PORT`
-4. Them Environment Variable:
-   - `PYTHON_VERSION=3.11.9`
-   - `GEMINI_API_KEY=<key cua ban>` neu can AI chat that
-5. Bam **Create Web Service**.
+- Runtime: `Python`
+- Build command: `pip install --no-cache-dir -r requirements.txt`
+- Start command: `uvicorn ai_service:app --host 0.0.0.0 --port $PORT`
 
-## Luu y
+Environment configuration:
 
-- Frontend da dung URL tuong doi, nen tren Render se goi API cung domain.
-- Render free plan co the sleep sau mot thoi gian khong truy cap.
-- Neu build bi cham, nguyen nhan thuong la goi `prophet` can cai nhieu dependency.
+- `PYTHON_VERSION=3.11.9`
+- `APP_ENV=staging` for a staging deployment or `production` for production
+- `DATABASE_PATH=./sales.db` for the current SQLite deployment
+- `SEED_DEMO_DATA=false`
+- `CORS_ORIGINS=https://your-production-domain.example` is mandatory when `APP_ENV=production`
+- `UPLOAD_DIR=./data/uploads`
+- `MAX_UPLOAD_BYTES=10485760`
+- `MAX_IMPORT_ROWS=100000`
+- `MAX_IMPORT_COLUMNS=100`
+
+## Data persistence warning
+
+Render's default filesystem is ephemeral. A production deployment must put both
+`DATABASE_PATH` and `UPLOAD_DIR` on a persistent disk, or migrate metadata to a
+managed database and files to durable object storage. Local SQLite and upload
+storage are suitable for the current demo/staging workflow only.
+
+No AI provider or external analytics provider is configured in Phase 1.

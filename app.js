@@ -1,1881 +1,1043 @@
-// CONFIGURATION: DIRECT CONNECTION TO AI BACKEND
-const AI_SERVICE_URL = window.location.protocol === "file:" ? "http://127.0.0.1:8000" : "";
+const screens = document.querySelectorAll('.screen');
+const navButtons = document.querySelectorAll('.bottom-nav button');
+const shell = document.querySelector('.mobile-shell');
+const modal = document.getElementById('modal');
+const searchOverlay = document.getElementById('search-overlay');
+const secondaryContent = document.getElementById('secondary-content');
+const secondaryHeader = document.getElementById('secondary-header');
+let currentBaseScreen = 'home';
+let currentPage = null;
+let authSession = null;
+let activeImport = null;
+let currentWebScreen = 'overview';
+const resourceRequests = new window.NexusResource.LatestRequestRegistry();
+const resourceQuery = new Map();
+const pageHistory = [];
+const publicPages = new Set(['splash','onboarding','login','forgot-password','register','reset-password']);
 
-let forecastChart = null;
-let segmentChart = null;
-let deepForecastChart = null;
-let deepSegmentChart = null;
-let sentimentSparklineChart = null;
+const pageRegistry = {
+  'splash': { title: 'Khởi động', type: 'auth', icon: 'ph-chart-polar', headline: 'Biến dữ liệu thành quyết định.', copy: 'Một nơi duy nhất để theo dõi, phân tích và hành động dựa trên dữ liệu.', cta: 'Bắt đầu', next: 'onboarding' },
+  'onboarding': { title: 'Giới thiệu', type: 'onboarding' },
+  'login': { title: 'Đăng nhập', type: 'form', kicker: 'CHÀO MỪNG TRỞ LẠI', headline: 'Đăng nhập Nexus', fields: ['Email công việc', 'Mật khẩu'], cta: 'Đăng nhập', nextScreen: 'home', link: 'Quên mật khẩu?', linkPage: 'forgot-password', secondaryLink: 'Tạo tài khoản', secondaryLinkPage: 'register' },
+  'forgot-password': { title: 'Quên mật khẩu', type: 'form', kicker: 'KHÔI PHỤC TÀI KHOẢN', headline: 'Nhận liên kết đặt lại', fields: ['Email công việc'], cta: 'Gửi liên kết', note: 'Chúng tôi sẽ gửi hướng dẫn khôi phục tới email của bạn.' },
+  'register': { title: 'Tạo tài khoản', type: 'form', kicker: 'BẮT ĐẦU VỚI NEXUS', headline: 'Tạo Workspace của bạn', fields: ['Họ và tên', 'Email công việc', 'Tên Workspace', 'Mật khẩu'], cta: 'Tạo tài khoản', link: 'Đã có tài khoản?', linkPage: 'login' },
+  'reset-password': { title: 'Đặt lại mật khẩu', type: 'form', kicker: 'BẢO MẬT TÀI KHOẢN', headline: 'Tạo mật khẩu mới', fields: ['Mật khẩu mới'], cta: 'Đặt lại mật khẩu' },
+  'revenue': { title: 'Chi tiết doanh thu', type: 'metric', kicker: 'DOANH THU', value: '₫124,592', change: '+12.5%', description: 'Doanh thu tăng mạnh nhờ Organic Search và chiến dịch Summer Sale.', rows: [['Organic Search','₫52,480'],['Direct','₫37,376'],['Paid Social','₫21,181'],['Referral','₫13,555']] },
+  'traffic': { title: 'Phân bổ doanh thu', type: 'metric', kicker: 'DOANH THU THEO DANH MỤC', value: '24,892', change: '+9.8%', description: 'Phân bổ doanh thu từ dữ liệu đã nhập trong Workspace.', rows: [] },
+  'users': { title: 'Phân tích người dùng', type: 'metric', kicker: 'ACTIVE USERS', value: '42,108', change: '+8.2%', description: 'Tệp người dùng mới tăng, tập trung tại Hà Nội và TP. Hồ Chí Minh.', rows: [['Người dùng mới','28,419'],['Quay lại','13,689'],['Mobile','64%'],['Desktop','31%']] },
+  'conversion': { title: 'Chuyển đổi', type: 'metric', kicker: 'CONVERSION RATE', value: '3.42%', change: '−0.5%', description: 'Mobile đang thấp hơn desktop; luồng checkout là điểm cần tối ưu.', rows: [['Xem sản phẩm','100%'],['Thêm giỏ hàng','21.8%'],['Bắt đầu checkout','8.4%'],['Hoàn tất','3.42%']] },
+  'insight-detail': { title: 'Chi tiết Insight', type: 'article', tag: 'AI INSIGHT · CƠ HỘI', headline: 'Google Search tạo nhóm khách hàng quay lại tốt nhất', copy: 'Khách hàng đến từ Organic Search có tỷ lệ quay lại trong 30 ngày cao hơn 34%. Giá trị đơn hàng trung bình của nhóm này cũng cao hơn 12%.', bullets: ['Tăng nội dung SEO cho nhóm sản phẩm chủ lực','Tạo remarketing riêng cho khách Organic','Theo dõi cohort trong 30 ngày tới'] },
+  'alert-detail': { title: 'Chi tiết cảnh báo', type: 'article', tag: 'NGHIÊM TRỌNG · 10:24', headline: 'Doanh thu giảm bất thường 21%', copy: 'Mức giảm bắt đầu lúc 08:30 và tập trung ở Paid Social. Organic Search vẫn hoạt động bình thường.', bullets: ['Kiểm tra trạng thái Facebook Ads','Đối chiếu thay đổi ngân sách sáng nay','Bật theo dõi mỗi 30 phút'] },
+  'reports': { title: 'Báo cáo', type: 'list', kicker: '8 BÁO CÁO', headline: 'Thư viện báo cáo', cta: 'Tạo báo cáo', ctaPage: 'create-report', items: [['Báo cáo hiệu suất Q3','Cập nhật 2 giờ trước','report-detail'],['Dự báo doanh thu tháng 11','Cập nhật hôm qua','report-detail'],['Phân tích Cohort 2026','Cập nhật 3 ngày trước','report-detail']] },
+  'report-detail': { title: 'Báo cáo Q3', type: 'report' },
+  'create-report': { title: 'Tạo báo cáo', type: 'form', kicker: 'BÁO CÁO MỚI', headline: 'Thiết lập báo cáo', fields: ['Tên báo cáo', 'Khoảng thời gian', 'Nguồn dữ liệu', 'Chỉ số theo dõi'], cta: 'Tạo bản nháp', note: 'Bạn có thể chỉnh sửa bố cục và chia sẻ sau.' },
+  'saved-views': { title: 'Chế độ xem đã lưu', type: 'list', kicker: '4 CHẾ ĐỘ XEM', headline: 'Không gian của bạn', items: [['Lưu lượng Mobile Việt Nam','Traffic · Mobile · 7 ngày','traffic'],['Hiệu suất Marketing','Revenue · Campaign · 30 ngày','revenue'],['Người dùng mới','New users · Acquisition','users'],['Checkout Funnel','Conversion · Funnel','conversion']] },
+  'data-sources': { title: 'Nguồn dữ liệu', type: 'list', kicker: '3 KẾT NỐI', headline: 'Quản lý dữ liệu', cta: 'Thêm nguồn', ctaPage: 'add-source', items: [['Google Analytics','Đồng bộ 5 phút trước','traffic'],['Facebook Ads','Đồng bộ 12 phút trước','revenue'],['Sales Database','Đồng bộ 1 giờ trước','users']] },
+  'add-source': { title: 'Thêm nguồn dữ liệu', type: 'sources' },
+  'notifications': { title: 'Thông báo', type: 'list', kicker: 'HÔM NAY', headline: 'Trung tâm thông báo', items: [['Insight mới được phát hiện','Organic Search đang tăng mạnh','insight-detail'],['Báo cáo đã sẵn sàng','Báo cáo Q3 có thể tải xuống','report-detail'],['Cảnh báo doanh thu','Paid Social giảm bất thường','alert-detail']] },
+  'global-search': { title: 'Tìm kiếm', type: 'search' },
+  'advanced-filter': { title: 'Bộ lọc nâng cao', type: 'filter' },
+  'edit-profile': { title: 'Chỉnh sửa hồ sơ', type: 'form', kicker: 'HỒ SƠ CÁ NHÂN', headline: 'Thông tin hiển thị', fields: ['Họ và tên', 'Chức danh', 'Email', 'Số điện thoại'], cta: 'Lưu thay đổi' },
+  'account': { title: 'Thông tin tài khoản', type: 'settings', items: [['Họ và tên','Trương Anh'],['Email','truong@nexus.vn'],['Vai trò','Data Analyst'],['Workspace','Nexus Team']] },
+  'settings': { title: 'Cài đặt ứng dụng', type: 'settings', items: [['Giao diện','Tự động'],['Ngôn ngữ','Tiếng Việt'],['Đơn vị tiền tệ','VND'],['Tuần bắt đầu','Thứ Hai']] },
+  'security': { title: 'Bảo mật', type: 'settings', items: [['Xác thực hai lớp','Đã bật'],['Đổi mật khẩu','Cập nhật 30 ngày trước'],['Thiết bị đăng nhập','2 thiết bị'],['Lịch sử hoạt động','Xem chi tiết']] },
+  'support': { title: 'Trợ giúp', type: 'list', kicker: 'NEXUS SUPPORT', headline: 'Chúng tôi có thể giúp gì?', items: [['Hướng dẫn sử dụng','Khám phá các tính năng chính','onboarding'],['Câu hỏi thường gặp','Câu trả lời nhanh cho bạn','support'],['Liên hệ hỗ trợ','Phản hồi trong 24 giờ','support'],['Về Nexus Analytics','Phiên bản UI 1.0','splash']] }
+};
 
-// New Activity Charts
-let leadSourceChart = null;
-let emailsDayChart = null;
-let followUpChart = null;
-let salesStatsChart = null;
-let callsDayChart = null;
-let responseTimeChart = null;
+const productScreens = [
+  ['01','Khởi động','splash'],['02','Giới thiệu','onboarding'],['03','Đăng nhập','login'],['04','Quên mật khẩu','forgot-password'],['05','Tổng quan','home'],['06','Phân tích','analytics'],['07','Chi tiết doanh thu','revenue'],['08','Nguồn truy cập','traffic'],['09','Người dùng','users'],['10','Chuyển đổi','conversion'],['11','Insights','insights'],['12','Chi tiết Insight','insight-detail'],['13','Cảnh báo','alerts'],['14','Chi tiết cảnh báo','alert-detail'],['15','Báo cáo','reports'],['16','Chi tiết báo cáo','report-detail'],['17','Tạo báo cáo','create-report'],['18','Chế độ xem đã lưu','saved-views'],['19','Nguồn dữ liệu','data-sources'],['20','Thêm nguồn dữ liệu','add-source'],['21','Thông báo','notifications'],['22','Tìm kiếm','global-search'],['23','Bộ lọc nâng cao','advanced-filter'],['24','Hồ sơ','profile'],['25','Chỉnh sửa hồ sơ','edit-profile'],['26','Thông tin tài khoản','account'],['27','Cài đặt ứng dụng','settings'],['28','Bảo mật','security'],['29','Trợ giúp','support']
+];
 
-let currentData = [];
-let filteredData = [];
-let columns = [];
-let tablePage = 1;
-const TABLE_PAGE_SIZE = 15;
-let uploadHistory = JSON.parse(localStorage.getItem('uploadHistory') || '[]');
-let currentCategoryFilter = 'all';
-let currentSegmentFilter = 'all';
-let notifications = [];
-let isAIConnected = false;
-let activeFilters = { period: 'all', dateFrom: '', dateTo: '', region: 'all', category: 'all' };
-
-document.addEventListener('DOMContentLoaded', () => {
-    const loginScreen = document.getElementById('login-screen');
-    const mainApp = document.getElementById('main-app');
-    const btnLogin = document.getElementById('btn-login');
-    const quickLogin = document.getElementById('quick-login');
-    const btnLogout = document.getElementById('btn-logout');
-    const csvUpload = document.getElementById('csv-upload');
-    const tableSearch = document.getElementById('table-search');
-    const categoryFilter = document.getElementById('category-filter');
-    const btnDemo = document.getElementById('btn-demo');
-    const btnExport = document.getElementById('btn-export');
-    const btnNotif = document.getElementById('btn-notif');
-    const notifPanel = document.getElementById('notif-panel');
-    const growthRange = document.getElementById('growth-range');
-
-    // 0. CHECK AI BACKEND HEALTH
-    checkAIHealth();
-
-    // 1. AUTH
-    const userInp = document.getElementById('username');
-    const passInp = document.getElementById('password');
-    if(userInp) userInp.value = 'admin';
-    if(passInp) passInp.value = '123';
-
-    const handleLogin = () => {
-        const user = userInp.value.trim();
-        const pass = passInp.value.trim();
-        if (user === 'admin' && pass === '123') {
-            loginScreen.classList.add('hidden');
-            mainApp.classList.remove('hidden');
-            showToast('Đăng nhập thành công', 'success', 'ph-shield-check');
-        } else {
-            showToast('Sai mật khẩu', 'error', 'ph-warning');
-        }
-    };
-
-    if (btnLogin) btnLogin.addEventListener('click', handleLogin);
-    if (quickLogin) quickLogin.addEventListener('click', (e) => { e.preventDefault(); handleLogin(); });
-
-    if (btnLogout) btnLogout.addEventListener('click', () => {
-        mainApp.classList.add('hidden');
-        loginScreen.classList.remove('hidden');
-    });
-
-    // 2. TAB SWITCHING (REFINED WITH AI CALLS)
-    const navItems = {
-        'nav-overview': 'tab-overview',
-        'nav-forecast': 'tab-forecast',
-        'nav-activity': 'tab-activity',
-        'nav-customers': 'tab-customers'
-    };
-
-    Object.keys(navItems).forEach(navId => {
-        const item = document.getElementById(navId);
-        if (item) {
-            item.addEventListener('click', async (e) => {
-                e.preventDefault();
-                console.log("Switching to tab:", navId);
-                document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
-                item.classList.add('active');
-                document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
-                
-                const targetTabId = navItems[navId];
-                const targetTab = document.getElementById(targetTabId);
-                if (targetTab) {
-                    targetTab.classList.remove('hidden');
-                    if (currentData.length > 0) {
-                        if (navId === 'nav-forecast') await renderDeepForecastWithAI();
-                        if (navId === 'nav-activity') renderActivityCharts();
-                        if (navId === 'nav-customers') await renderDeepCustomersWithAI();
-                    }
-                }
-            });
-        }
-    });
-
-    // 3. ACTIONS
-    if (csvUpload) csvUpload.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) { addToHistory(file.name); processFile(file); }
-    });
-
-    if (btnDemo) btnDemo.addEventListener('click', () => loadDemoData());
-    if (btnExport) btnExport.addEventListener('click', () => exportToPDF());
-
-    // Notifications
-    if (btnNotif && notifPanel) {
-        btnNotif.addEventListener('click', (e) => {
-            e.stopPropagation();
-            notifPanel.classList.toggle('hidden');
-            if (!notifPanel.classList.contains('hidden')) {
-                const badge = document.querySelector('.notif-badge');
-                if (badge) badge.classList.add('hidden');
-            }
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!notifPanel.contains(e.target) && !btnNotif.contains(e.target)) {
-                notifPanel.classList.add('hidden');
-            }
-        });
-    }
-
-    // --- FILTER EVENT LISTENERS (event delegation) ---
-    const periodChips = document.getElementById('period-chips');
-    if (periodChips) periodChips.addEventListener('click', e => {
-        const chip = e.target.closest('[data-period]');
-        if (!chip) return;
-        periodChips.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        activeFilters.period = chip.dataset.period;
-        applyPeriodPreset(chip.dataset.period);
-        applyAllFilters();
-    });
-
-    const regionChips = document.getElementById('region-chips');
-    if (regionChips) regionChips.addEventListener('click', e => {
-        const chip = e.target.closest('[data-region]');
-        if (!chip) return;
-        regionChips.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        activeFilters.region = chip.dataset.region;
-        applyAllFilters();
-    });
-
-    const categoryChips = document.getElementById('category-chips');
-    if (categoryChips) categoryChips.addEventListener('click', e => {
-        const chip = e.target.closest('[data-cat]');
-        if (!chip) return;
-        categoryChips.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-        activeFilters.category = chip.dataset.cat;
-        applyAllFilters();
-    });
-
-    const dateFrom = document.getElementById('filter-date-from');
-    const dateTo   = document.getElementById('filter-date-to');
-    if (dateFrom) dateFrom.addEventListener('change', e => {
-        activeFilters.dateFrom = e.target.value;
-        // Clear period presets
-        document.querySelectorAll('#period-chips .chip').forEach(c => c.classList.remove('active'));
-        document.querySelector('#period-chips [data-period="all"]')?.classList.add('active');
-        activeFilters.period = 'all';
-        applyAllFilters();
-    });
-    if (dateTo) dateTo.addEventListener('change', e => {
-        activeFilters.dateTo = e.target.value;
-        document.querySelectorAll('#period-chips .chip').forEach(c => c.classList.remove('active'));
-        document.querySelector('#period-chips [data-period="all"]')?.classList.add('active');
-        activeFilters.period = 'all';
-        applyAllFilters();
-    });
-
-    const btnReset = document.getElementById('btn-reset-filters');
-    if (btnReset) btnReset.addEventListener('click', resetAllFilters);
-
-    // Table search (live filter)
-    if (tableSearch) tableSearch.addEventListener('input', () => {
-        tablePage = 1;
-        applyTableView();
-    });
-    // Category-filter select in table header
-    if (categoryFilter) categoryFilter.addEventListener('change', () => {
-        tablePage = 1;
-        applyTableView();
-    });
-    // Pagination click (event delegation)
-    const pagContainer = document.getElementById('table-pagination');
-    if (pagContainer) pagContainer.addEventListener('click', e => {
-        const btn = e.target.closest('[data-page]');
-        if (!btn || btn.disabled) return;
-        const pg = parseInt(btn.dataset.page);
-        if (!isNaN(pg)) { tablePage = pg; applyTableView(); }
-        document.getElementById('data-table')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    });
-    // Export buttons
-    document.getElementById('btn-export-csv')?.addEventListener('click', exportTableCSV);
-    document.getElementById('btn-export-excel')?.addEventListener('click', exportTableExcel);
-});
-
-// --- CORE AI PIPELINE STABILITY ---
-
-// --- AI HEALTH & RETRY ---
-
-let realtimeInterval = null;
-
-async function checkAIHealth() {
-    updateAIStatusBadge('checking');
-    try {
-        const res = await fetch(`${AI_SERVICE_URL}/health`, {
-            method: 'GET',
-            mode: 'cors',
-            signal: AbortSignal.timeout(5000)
-        });
-        if (res.ok) {
-            isAIConnected = true;
-            console.log("AI Backend is ONLINE");
-            updateAIStatusBadge('online');
-            
-            if (!realtimeInterval) {
-                showToast('Đã kết nối AI Database Real-time', 'success', 'ph-database');
-                fetchRealtimeData();
-                realtimeInterval = setInterval(fetchRealtimeData, 10000);
-            }
-        } else {
-            throw new Error(`Status ${res.status}`);
-        }
-    } catch (err) {
-        isAIConnected = false;
-        console.warn("AI Backend OFFLINE:", err.message);
-        updateAIStatusBadge('offline');
-        if (realtimeInterval) {
-            clearInterval(realtimeInterval);
-            realtimeInterval = null;
-        }
-        setTimeout(checkAIHealth, 15000);
-    }
+function showScreen(name) {
+  if (!authSession) return openPage('login');
+  currentBaseScreen = name;
+  currentPage = null;
+  shell.classList.remove('immersive');
+  screens.forEach(screen => screen.classList.toggle('active', screen.id === `${name}-screen`));
+  navButtons.forEach(button => button.classList.toggle('active', button.dataset.screen === name));
+  loadMobileScreen(name);
 }
 
-async function fetchRealtimeData() {
-    if (!isAIConnected) return;
-    try {
-        const anomalyRes = await fetch(`${AI_SERVICE_URL}/api/anomalies`);
-        if (anomalyRes.ok) {
-            const anomalyData = await anomalyRes.json();
-            const banner = document.getElementById('anomaly-container');
-            const text = document.getElementById('anomaly-text');
-            if (anomalyData.status === 'success' && anomalyData.anomaly) {
-                if (banner) {
-                    banner.classList.remove('hidden');
-                    text.innerHTML = `${anomalyData.message} <button class="btn btn-primary" style="margin-left: 10px; padding: 2px 8px; font-size: 0.8rem;">Xem chi tiết</button>`;
-                    banner.style.background = 'rgba(239, 68, 68, 0.15)';
-                    banner.style.border = '1px solid rgba(239, 68, 68, 0.3)';
-                    banner.style.color = '#f87171';
-                }
-            } else {
-                if (banner) banner.classList.add('hidden');
-            }
-        }
-
-        const salesRes = await fetch(`${AI_SERVICE_URL}/api/sales/realtime`);
-        if (salesRes.ok) {
-            const result = await salesRes.json();
-            if (result.status === 'success' && result.data.length > 0) {
-                const isFirstTime = currentData.length === 0;
-                currentData = result.data;
-                columns = Object.keys(result.data[0]);
-                
-                if (isFirstTime) {
-                    initDashboard();
-                } else {
-                    filteredData = [...currentData];
-                    runAIAnalytics();
-                    applyTableView();
-                }
-            }
-        }
-    } catch (err) {
-        console.error("Realtime fetch error:", err);
-    }
+function openDetail(title, description) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-description').textContent = description;
+  modal.classList.add('open');
 }
 
-function updateAIStatusBadge(state) {
-    let badge = document.getElementById('ai-status-badge');
-    if (!badge) {
-        badge = document.createElement('div');
-        badge.id = 'ai-status-badge';
-        badge.style.cssText = [
-            'position:fixed', 'bottom:16px', 'right:16px', 'z-index:9999',
-            'display:flex', 'align-items:center', 'gap:6px',
-            'padding:6px 12px', 'border-radius:999px',
-            'font-size:12px', 'font-weight:600', 'font-family:Outfit,sans-serif',
-            'box-shadow:0 4px 15px rgba(0,0,0,0.4)',
-            'transition:all 0.4s ease', 'cursor:default',
-            'letter-spacing:0.5px'
-        ].join(';');
-        document.body.appendChild(badge);
-    }
-    const configs = {
-        checking: { bg: 'rgba(30,30,50,0.92)', border: '#6366f1', dot: '#a5b4fc', text: '⚙ Đang kiểm tra AI...' },
-        online:   { bg: 'rgba(16,40,30,0.92)', border: '#10b981', dot: '#34d399', text: '● AI Forecast Online' },
-        offline:  { bg: 'rgba(40,16,16,0.92)', border: '#ef4444', dot: '#f87171', text: '● Mô phỏng nội bộ' }
-    };
-    const cfg = configs[state] || configs.offline;
-    badge.style.background = cfg.bg;
-    badge.style.border = `1px solid ${cfg.border}`;
-    badge.style.color = cfg.dot;
-    badge.innerHTML = `<span style="font-size:10px">${cfg.text}</span>`;
-    badge.title = state === 'online'
-        ? 'AI Backend đang hoạt động'
-        : 'Đang dùng dự báo tuyến tính nội bộ (không cần server)';
+function metricChart() {
+  return `<div class="detail-chart"><div class="chart-line"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="chart-days"><span>T2</span><span>T3</span><span>T4</span><span>T5</span><span>T6</span><span>T7</span><span>CN</span></div></div>`;
 }
 
-/**
- * fetchWithRetry – Exponential backoff (1s, 2s, 4s)
- */
-async function fetchWithRetry(url, options, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 8000);
-            const response = await fetch(url, { ...options, signal: controller.signal });
-            clearTimeout(timer);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            return await response.json();
-        } catch (err) {
-            const isLast = i === retries - 1;
-            const delay = Math.pow(2, i) * 1000; // 1s, 2s, 4s
-            console.warn(`[AI] Lần ${i + 1}/${retries} thất bại: ${err.message}${isLast ? '' : ` – thử lại sau ${delay/1000}s`}`);
-            if (isLast) throw err;
-            await new Promise(r => setTimeout(r, delay));
-        }
-    }
+const ingestionFields = [
+  ['timestamp','Thời gian','DATE_TIME',true],
+  ['revenue','Doanh thu','NUMBER',true],
+  ['event_id','Mã sự kiện','STRING',false],
+  ['customer_id','Mã khách hàng','STRING',false],
+  ['category','Danh mục','STRING',false],
+  ['region','Khu vực','STRING',false],
+  ['source','Nguồn','STRING',false],
+  ['product','Sản phẩm','STRING',false],
+  ['currency','Tiền tệ','STRING',false],
+  ['is_conversion','Chuyển đổi','BOOLEAN',false]
+];
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[character]));
 }
 
-// --- REAL AI INTEGRATION FUNCTIONS ---
-
-async function renderDeepForecastWithAI() {
-    const monthlySales = getMonthlySales();
-    if (monthlySales.length === 0) return;
-
-    const apiData = monthlySales.map(m => ({ ds: m.month + "-01", y: parseFloat(m.total) }));
-
-    if (isAIConnected) {
-        showToast('AI đang phân tích xu hướng...', 'info', 'ph-sparkle');
-        try {
-            const result = await fetchWithRetry(`${AI_SERVICE_URL}/forecast`, {
-                method: 'POST',
-                mode: 'cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(apiData)
-            });
-            if (result.status === 'success') {
-                renderForecastChartDeep(monthlySales, result.forecast);
-                showToast('AI dự báo hoàn tất!', 'success', 'ph-check');
-                return;
-            }
-        } catch (err) {
-            console.warn("[AI Forecast] Chuyển sang mô phỏng nội bộ:", err.message);
-            isAIConnected = false;
-            updateAIStatusBadge('offline');
-        }
-    }
-
-    // --- FALLBACK: Mô phỏng tuyến tính nội bộ (6 tháng) ---
-    showToast('Dùng dự báo mô phỏng nội bộ (6 tháng)', 'info', 'ph-chart-line-up');
-    const simulatedForecast = calculateSimulatedForecast(monthlySales, 6);
-    renderForecastChartDeep(monthlySales, simulatedForecast);
+function canManageIngestion() {
+  return ['OWNER','ADMIN'].includes(authSession?.workspace?.role);
 }
 
-async function renderDeepCustomersWithAI() {
-    const mapping = calculateRFMDataRaw();
-    const apiData = Object.keys(mapping).map(id => ({
-        id: String(id),
-        frequency: parseInt(mapping[id].count),
-        monetary: parseFloat(mapping[id].total)
-    }));
-
-    showToast('AI đang phân loại khách hàng...', 'info', 'ph-users-three');
-
-    try {
-        const result = await fetchWithRetry(`${AI_SERVICE_URL}/cluster`, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(apiData)
-        });
-
-        if (result.status === 'success') {
-            renderClusterChartDeep(result.clusters);
-            showToast('Phân cụm K-Means hoàn tất', 'success', 'ph-users-four');
-        }
-    } catch (err) {
-        console.error("Clustering Error:", err);
-        showToast('Dùng phân cụm mặc định.', 'info', 'ph-user');
-        renderClusterChartDeepDefault(calculateRFM());
-    }
+function ingestionWorkspace(compact = false) {
+  const allowed = canManageIngestion();
+  return `<section class="ingestion-workspace ${compact ? 'compact' : ''}">
+    <input class="ingestion-file-input" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+    <div class="ingestion-upload-card">
+      <span><i class="ph-fill ph-file-arrow-up"></i></span>
+      <div><b>Tải tệp CSV hoặc XLSX</b><small>Tối đa 10 MB · 100.000 dòng · tệp được kiểm tra trước khi nhập</small></div>
+      <button class="${compact ? 'primary-button' : 'dark-button'}" data-action="choose-import-file" ${allowed ? '' : 'disabled'}>Chọn tệp</button>
+    </div>
+    ${allowed ? '' : '<p class="ingestion-permission"><i class="ph ph-lock"></i> Chỉ Owner hoặc Admin có thể nhập dữ liệu.</p>'}
+    <div class="ingestion-status" role="status"></div>
+    <div class="ingestion-preview"></div>
+    <div class="ingestion-history"><p class="loading-state">Đang tải lịch sử nhập...</p></div>
+  </section>`;
 }
 
-function renderForecastChartDeep(history, forecast) {
-    const canvas = document.getElementById('forecastChartDeep');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (deepForecastChart) deepForecastChart.destroy();
-
-    const historyLabels = history.map(h => h.month);
-    const forecastLabels = forecast.map(f => f.ds);
-    const labels = [...historyLabels, ...forecastLabels];
-
-    deepForecastChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [
-                { 
-                    label: 'Lịch sử doanh thu', 
-                    data: history.map(h => h.total), 
-                    borderColor: '#6366f1', 
-                    backgroundColor: 'rgba(99, 102, 241, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                },
-                { 
-                    label: 'Dự báo từ AI', 
-                    data: labels.map((l, i) => i >= history.length ? forecast[i-history.length].yhat : null), 
-                    borderColor: '#06b6d4', 
-                    borderDash: [5, 5],
-                    fill: false,
-                    tension: 0.4
-                },
-                {
-                    label: 'Biên dưới (AI)',
-                    data: labels.map((l, i) => i >= history.length ? forecast[i-history.length].yhat_lower : null),
-                    borderColor: 'transparent',
-                    backgroundColor: 'transparent',
-                    pointRadius: 0,
-                    fill: false,
-                    tension: 0.4
-                },
-                {
-                    label: 'Vùng tin cậy (Sai số)',
-                    data: labels.map((l, i) => i >= history.length ? forecast[i-history.length].yhat_upper : null),
-                    borderColor: 'transparent',
-                    backgroundColor: 'rgba(6, 182, 212, 0.15)',
-                    pointRadius: 0,
-                    fill: '-1',
-                    tension: 0.4
-                }
-            ]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false,
-            scales: {
-                y: { beginAtZero: false, grid: { color: 'rgba(255,255,255,0.05)' } },
-                x: { grid: { display: false } }
-            }
-        }
-    });
-
-    const baseRevenue = forecast[0]?.yhat || 0;
-    const simValue = document.getElementById('sim-value');
-    if (simValue) simValue.textContent = Math.round(baseRevenue).toLocaleString('vi-VN') + ' đ';
-
-    // Render Budget Optimization Chart (Prescriptive AI)
-    const budgetCtx = document.getElementById('budgetOptimizationChart');
-    if (budgetCtx) {
-        if (window.budgetChartObj) window.budgetChartObj.destroy();
-        window.budgetChartObj = new Chart(budgetCtx.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: ['Lazada', 'Facebook Ads', 'Tiktok Shop', 'Google Ads'],
-                datasets: [
-                    {
-                        label: 'Phân bổ đề xuất (Triệu VNĐ)',
-                        data: [60, 45, 30, 15],
-                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#06b6d4'],
-                        borderRadius: 6
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                indexAxis: 'y', // Horizontal bar chart
-                scales: {
-                    x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } },
-                    y: { grid: { display: false }, ticks: { color: '#e2e8f0', font: { weight: 500 } } }
-                },
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: function(ctx) {
-                                // Mock ROI for each channel
-                                const rois = [28, 22, 35, 15];
-                                return `${ctx.raw} Triệu VNĐ (ROI dự kiến: +${rois[ctx.dataIndex]}%)`;
-                            }
-                        }
-                    }
-                }
-            }
-        });
-    }
+function renderPage(page) {
+  if (page === 'ui-map') return `<div class="secondary-heading"><p class="eyebrow">MOBILE DESIGN SYSTEM</p><h1>29 màn hình UI</h1><p>Mở từng màn hình để kiểm tra giao diện và luồng điều hướng.</p></div><div class="ui-map">${productScreens.map(([number,title,key]) => `<button data-route="${key}"><span>${number}</span><b>${title}</b><i class="ph ph-caret-right"></i></button>`).join('')}</div>`;
+  const config = pageRegistry[page];
+  if (!config) return '';
+  if (config.type === 'auth') return `<div class="auth-view"><span class="auth-logo"><i class="ph-fill ${config.icon}"></i></span><div><p class="eyebrow">NEXUS ANALYTICS</p><h1>${config.headline}</h1><p>${config.copy}</p><button class="primary-button" data-route="${config.next}">${config.cta}</button></div></div>`;
+  if (config.type === 'onboarding') return `<div class="onboarding-view"><div class="onboarding-art"><i class="ph-fill ph-chart-line-up"></i><i class="ph-fill ph-sparkle"></i><i class="ph-fill ph-database"></i></div><p class="eyebrow">MỌI DỮ LIỆU · MỘT NƠI</p><h1>Hiểu doanh nghiệp trong vài giây</h1><p>Theo dõi chỉ số, nhận Insight từ AI và hành động ngay khi có biến động.</p><div class="onboarding-dots"><i></i><i></i><i></i></div><button class="primary-button" data-route="login">Tiếp tục</button></div>`;
+  if (config.type === 'form') return `<div class="secondary-heading"><p class="eyebrow">${config.kicker}</p><h1>${config.headline}</h1>${config.note ? `<p>${config.note}</p>` : ''}</div><form class="mobile-form">${config.fields.map((field,index) => { const passwordField = field.toLowerCase().includes('khẩu'); const emailField = field.toLowerCase().includes('email'); return `<label>${field}<div><input type="${passwordField ? 'password' : emailField ? 'email' : 'text'}" autocomplete="${passwordField ? (currentPage === 'login' ? 'current-password' : 'new-password') : emailField ? 'email' : 'off'}" placeholder="${index ? `Nhập ${field.toLowerCase()}` : field}"/><i class="ph ph-${passwordField ? 'lock' : 'pencil-simple'}"></i></div></label>`; }).join('')}<p class="form-status" role="status"></p><button type="button" class="primary-button" ${config.nextScreen ? `data-screen="${config.nextScreen}"` : ''}>${config.cta}</button>${config.link ? `<button type="button" class="form-link" data-route="${config.linkPage}">${config.link}</button>` : ''}${config.secondaryLink ? `<button type="button" class="form-link" data-route="${config.secondaryLinkPage}">${config.secondaryLink}</button>` : ''}</form>`;
+  if (['users','insight-detail','alert-detail'].includes(page)) return blockedMarkup(page === 'users' ? 'Backend chưa có mô hình sự kiện người dùng để cung cấp chỉ số này.' : 'Backend chưa có endpoint chi tiết; nội dung từ danh sách vẫn xem được trong hộp thoại.');
+  if (['reports','saved-views','data-sources'].includes(page)) return `<div class="secondary-heading"><p class="eyebrow">DỮ LIỆU WORKSPACE</p><h1>${config.headline}</h1></div>${config.cta ? `<button class="create-button" data-route="${config.ctaPage}"><i class="ph ph-plus"></i>${config.cta}</button>` : ''}${resourceToolbar(page)}<div class="page-list resource-host" data-resource-host="${page}">${skeletonMarkup(3)}</div>`;
+  if (page === 'global-search') return `<div class="standalone-search"><i class="ph ph-magnifying-glass"></i><input data-resource-search="global-search" placeholder="Tìm báo cáo, chế độ xem, nguồn dữ liệu..." autofocus></div><p class="group-label">KẾT QUẢ TỪ WORKSPACE</p><div class="page-list resource-host" data-resource-host="global-search">${emptyMarkup('Nhập từ khóa để tìm kiếm dữ liệu thật.')}</div>`;
+  if (page === 'account') return `<div class="secondary-heading"><p class="eyebrow">NEXUS ACCOUNT</p><h1>Thông tin tài khoản</h1></div>${skeletonMarkup(4)}`;
+  if (['notifications','report-detail'].includes(page)) return blockedMarkup(page === 'notifications' ? 'Trung tâm thông báo chưa có API.' : 'Chi tiết và xuất báo cáo chưa có API.');
+  if (['settings','security'].includes(page)) return `<div class="secondary-heading"><p class="eyebrow">CHƯA CÓ BACKEND</p><h1>${config.title}</h1></div>${blockedMarkup('Các cấu hình này chỉ được hiển thị để giữ nguyên UI; chưa thể lưu hoặc thay đổi.')}`;
+  if (config.type === 'metric') return `<div class="secondary-heading"><p class="eyebrow">${config.kicker}</p><h1>—</h1><span class="trend up">API</span><p>Dữ liệu theo Workspace đang được tải.</p></div>${skeletonMarkup(2)}<div class="detail-rows">${skeletonMarkup(3)}</div>`;
+  if (config.type === 'article') return `<article class="article-view"><span class="article-icon"><i class="ph-fill ph-sparkle"></i></span><p class="eyebrow">${config.tag}</p><h1>${config.headline}</h1><p>${config.copy}</p><h3>Đề xuất hành động</h3>${config.bullets.map((item,index) => `<div class="recommendation"><b>0${index+1}</b><span>${item}</span></div>`).join('')}<button class="primary-button">Tạo nhiệm vụ theo dõi</button></article>`;
+  if (config.type === 'list') return `<div class="secondary-heading"><p class="eyebrow">${config.kicker}</p><h1>${config.headline}</h1></div>${config.cta ? `<button class="create-button" data-route="${config.ctaPage}"><i class="ph ph-plus"></i>${config.cta}</button>` : ''}<div class="page-list">${config.items.map(([title,subtitle,target]) => `<button data-route="${target}"><span class="page-list-icon"><i class="ph ph-file-text"></i></span><span><b>${title}</b><small>${subtitle}</small></span><i class="ph ph-caret-right"></i></button>`).join('')}</div>`;
+  if (config.type === 'report') return `<div class="report-cover"><p class="eyebrow">01/07 — 30/09/2026</p><h1>Báo cáo hiệu suất Q3</h1><span class="pill">Đã hoàn tất</span></div><div class="report-kpis"><article><small>DOANH THU</small><b>₫342K</b><em>+14.2%</em></article><article><small>NGƯỜI DÙNG</small><b>128K</b><em>+8.7%</em></article></div>${metricChart()}<button class="primary-button"><i class="ph ph-download-simple"></i> Xuất PDF</button>`;
+  if (config.type === 'sources') return `<div class="secondary-heading"><p class="eyebrow">NHẬP DỮ LIỆU THẬT</p><h1>Thêm nguồn dữ liệu</h1><p>Hiện hỗ trợ tệp CSV và Excel. Các kết nối bên ngoài sẽ được mở ở giai đoạn sau.</p></div><div class="source-grid"><button disabled><b class="google">G</b><span>Google Analytics</span><small>Sắp có</small></button><button disabled><b class="facebook"><i class="ph-fill ph-facebook-logo"></i></b><span>Facebook Ads</span><small>Sắp có</small></button><button disabled><b class="email"><i class="ph-fill ph-database"></i></b><span>PostgreSQL</span><small>Sắp có</small></button><button class="active-source" data-action="choose-import-file"><b><i class="ph-fill ph-file-csv"></i></b><span>CSV / Excel</span><small>Đang hỗ trợ</small></button></div>${ingestionWorkspace(true)}`;
+  if (config.type === 'filter') return `<div class="secondary-heading"><p class="eyebrow">TÙY CHỈNH DỮ LIỆU</p><h1>Bộ lọc nâng cao</h1></div><div class="filter-form"><label>Khoảng thời gian<select data-analytics-days><option value="7">7 ngày qua</option><option value="30">30 ngày qua</option><option value="90">90 ngày qua</option><option value="custom">Tùy chỉnh</option></select></label><div class="filter-date-range"><label>Từ ngày<input type="date" data-analytics-date-from></label><label>Đến ngày<input type="date" data-analytics-date-to></label></div><label>Nguồn dữ liệu<select disabled title="Chưa có API lọc theo data source"><option>Tất cả nguồn</option></select></label><p class="blocked-note">Lọc theo kênh và thiết bị đang BLOCKED vì backend chưa có event dimensions.</p><p class="form-status" role="status"></p><button class="primary-button" data-action="apply-analytics-filter">Áp dụng bộ lọc</button></div>`;
+  if (config.type === 'settings') return `<div class="secondary-heading"><p class="eyebrow">NEXUS ACCOUNT</p><h1>${config.title}</h1></div><div class="settings-detail">${config.items.map(([label,value]) => `<button><span><small>${label}</small><b>${value}</b></span><i class="ph ph-caret-right"></i></button>`).join('')}</div>`;
+  return '';
 }
 
-function renderClusterChartDeep(clusters) {
-    const canvas = document.getElementById('segmentChartDeep');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (deepSegmentChart) deepSegmentChart.destroy();
+function openPage(page, addHistory = true) {
+  if (!authSession && !publicPages.has(page)) page = 'login';
+  if (['home','analytics','insights','alerts','profile'].includes(page)) return showScreen(page);
+  if (addHistory && currentPage) pageHistory.push(currentPage);
+  currentPage = page;
+  const config = pageRegistry[page];
+  secondaryHeader.textContent = page === 'ui-map' ? 'UI Map' : config?.title || 'Chi tiết';
+  secondaryContent.innerHTML = renderPage(page);
+  screens.forEach(screen => screen.classList.toggle('active', screen.id === 'secondary-screen'));
+  navButtons.forEach(button => button.classList.remove('active'));
+  shell.classList.toggle('immersive', ['splash','onboarding','login','forgot-password','register','reset-password'].includes(page));
+  secondaryContent.scrollTop = 0;
+  if (page === 'add-source') loadImportHistory();
+  loadSecondaryResource(page);
+}
 
-    const datasets = [
-        { label: 'Nhóm VIP', data: [], backgroundColor: '#6366f1' },
-        { label: 'Tiềm năng', data: [], backgroundColor: '#06b6d4' },
-        { label: 'Mới', data: [], backgroundColor: '#3b82f6' },
-        { label: 'Rời bỏ', data: [], backgroundColor: '#8b5cf6' }
+function goBack() {
+  if (pageHistory.length) return openPage(pageHistory.pop(), false);
+  showScreen(currentBaseScreen || 'home');
+}
+
+const webPages = {
+  realtime: ['Phân tích thời gian thực','Theo dõi hoạt động người dùng ngay lúc này','pulse'],
+  funnel: ['Phân tích Funnel','Theo dõi hành trình chuyển đổi từ truy cập đến mua hàng','funnel'],
+  explorer: ['Khám phá dữ liệu','Tự do kết hợp dimensions và metrics để tìm câu trả lời','explorer'],
+  insights: ['AI Insights','Những phát hiện quan trọng được Nexus AI đề xuất','insights'],
+  journey: ['Hành trình người dùng','Quan sát các bước người dùng đi qua trước khi chuyển đổi','journey'],
+  retention: ['Retention','Đo lường khả năng người dùng quay lại theo thời gian','retention'],
+  segmentation: ['Phân khúc người dùng','Tạo và so sánh các nhóm người dùng theo hành vi','table'],
+  cohort: ['Phân tích Cohort','So sánh hành vi của các nhóm người dùng theo thời gian','cohort'],
+  'revenue-analysis': ['Phân tích doanh thu','Đánh giá xu hướng và động lực tăng trưởng doanh thu','revenue'],
+  anomaly: ['Phát hiện bất thường','Theo dõi tự động các biến động vượt ngoài dự kiến','anomaly'],
+  alerts: ['Cảnh báo','Thiết lập và quản lý các cảnh báo dữ liệu','alerts'],
+  forecast: ['Dự báo','Dự đoán doanh thu và hành vi dựa trên dữ liệu lịch sử','forecast'],
+  reports: ['Quản lý Báo cáo','Tạo, theo dõi và xuất các báo cáo phân tích','reports'],
+  dashboards: ['Dashboards','Quản lý các dashboard phục vụ từng mục tiêu','dashboards'],
+  builder: ['Dashboard Builder','Kéo thả widget để xây dashboard riêng','builder'],
+  sources: ['Nguồn dữ liệu','Quản lý và theo dõi trạng thái các nguồn kết nối','sources'],
+  events: ['Sự kiện','Theo dõi sự kiện và thuộc tính được gửi về hệ thống','events'],
+  saved: ['Chế độ xem đã lưu','Truy cập nhanh các cấu hình phân tích thường dùng','dashboards'],
+  quality: ['Chất lượng dữ liệu','Giám sát độ đầy đủ, tính chính xác và độ trễ dữ liệu','quality'],
+  export: ['Xuất dữ liệu','Quản lý lịch sử và trạng thái các tác vụ xuất dữ liệu','export'],
+  members: ['Thành viên','Quản lý thành viên và quyền truy cập Workspace','members'],
+  activity: ['Nhật ký hoạt động','Theo dõi thay đổi quan trọng trong Workspace','activity'],
+  settings: ['Cài đặt hệ thống','Quản lý tài khoản, tích hợp và API key','settings']
+};
+
+const webKpis = (items) => `<div class="reference-kpis">${items.map(([label,value,change]) => `<article><small>${label}</small><h2>${value}</h2><span class="${change?.startsWith('-') ? 'bad' : ''}">${change || ''}</span></article>`).join('')}</div>`;
+const webHeading = (title,description,action='Xuất dữ liệu') => {
+  const create = ['Tạo báo cáo','Tạo cảnh báo'].includes(action);
+  const refresh = action === 'Làm mới';
+  const importFile = action === 'Nhập từ tệp';
+  const invite = action === 'Mời thành viên';
+  const disabled = !create && !refresh && !importFile && !invite;
+  const attribute = create ? 'data-action="focus-create-resource"' : refresh ? 'data-action="refresh-web-resource"' : importFile ? 'data-action="choose-import-file"' : invite ? 'data-action="focus-member-invite"' : 'disabled';
+  return `<div class="reference-heading"><div><h1>${title}</h1><p>${description}</p></div><div><button class="soft-button" disabled title="Dùng bộ lọc dữ liệu bên dưới"><i class="ph ph-calendar-blank"></i> Khoảng thời gian</button><button class="dark-button" ${attribute} ${disabled ? 'title="Backend chưa hỗ trợ thao tác này"' : ''}><i class="ph ${refresh ? 'ph-arrow-clockwise' : create ? 'ph-plus' : 'ph-download-simple'}"></i> ${action}</button></div></div>`;
+};
+const miniTable = (rows) => `<div class="reference-table"><table><thead><tr><th>TÊN</th><th>TRẠNG THÁI</th><th>NGƯỜI DÙNG</th><th>CHUYỂN ĐỔI</th><th></th></tr></thead><tbody>${rows.map(([name,status,users,rate]) => `<tr><td><b>${name}</b></td><td><span class="status-pill">${status}</span></td><td>${users}</td><td>${rate}</td><td><i class="ph ph-dots-three"></i></td></tr>`).join('')}</tbody></table></div>`;
+
+function renderWebPage(key) {
+  const [title,description,type] = webPages[key];
+  if (type === 'members') return `${webHeading(title,description,'Mời thành viên')}<div class="member-invite"><input type="email" placeholder="email@company.com"><select><option>VIEWER</option><option>ANALYST</option><option>ADMIN</option></select><button class="dark-button" data-action="invite-member">Gửi lời mời</button><span role="status"></span></div><div class="reference-table" id="workspace-members"><p class="loading-state">Đang tải thành viên...</p></div>`;
+  if (type === 'reports') return `${webHeading(title,description,'Tạo báo cáo')}<form class="web-create-form" data-create-resource="report"><input name="name" placeholder="Tên báo cáo" required><select name="report_type"><option value="performance">Hiệu suất</option><option value="cohort">Cohort</option><option value="custom">Tùy chỉnh</option></select><button class="dark-button" type="submit">Tạo bản nháp</button><span role="status"></span></form><div class="web-resource-controls">${resourceToolbar('web-reports')}</div><div class="resource-host web-resource-host" data-resource-host="web-reports">${skeletonMarkup(4)}</div>`;
+  if (type === 'alerts') return `${webHeading(title,description,'Tạo cảnh báo')}<form class="web-create-form" data-create-resource="alert"><input name="title" placeholder="Tên cảnh báo" required><input name="description" placeholder="Mô tả" required><select name="severity"><option value="medium">Theo dõi</option><option value="high">Nghiêm trọng</option><option value="low">Thấp</option></select><button class="dark-button" type="submit">Tạo cảnh báo</button><span role="status"></span></form><div class="web-resource-controls">${resourceToolbar('web-alerts')}</div><div class="resource-host web-resource-host" data-resource-host="web-alerts">${skeletonMarkup(4)}</div>`;
+  if (['insights','pulse','funnel','cohort','revenue'].includes(type)) return `${webHeading(title,description,'Làm mới')}<div class="web-resource-controls">${type === 'insights' ? resourceToolbar('web-insights') : dateToolbar(`web-${type}`)}</div><div class="resource-host web-resource-host" data-resource-host="web-${type}">${skeletonMarkup(4)}</div>`;
+  if (type === 'sources') return `${webHeading(title,'Tải CSV/XLSX, kiểm tra dữ liệu và theo dõi từng lần nhập','Nhập từ tệp')}<div class="web-resource-controls">${resourceToolbar('web-sources')}</div><div class="resource-host web-resource-host" data-resource-host="web-sources">${skeletonMarkup(3)}</div>${ingestionWorkspace(false)}`;
+  if (['dashboards','builder','table','journey','retention','forecast','events','quality','export','activity','settings','explorer','anomaly'].includes(type)) return `${webHeading(title,description,'Chưa khả dụng')}${blockedMarkup('Backend chưa có capability tương ứng. Màn hình được giữ nguyên trong điều hướng nhưng mọi thao tác giả đã bị khóa.')}`;
+  if (type === 'pulse') return `${webHeading(title,description,'Tạm dừng')} ${webKpis([['ĐANG HOẠT ĐỘNG','1,284','+12.4%'],['SỰ KIỆN / PHÚT','3,821','+8.1%'],['DOANH THU 30 PHÚT','₫12,840','+18.3%'],['CHUYỂN ĐỔI','3.82%','-0.2%']])}<div class="reference-grid wide"><article class="reference-card"><h3>Hoạt động trong 30 phút gần nhất</h3><div class="reference-bars">${[35,48,42,66,52,81,74,96,86,70,92,78].map(v=>`<i style="height:${v}%"></i>`).join('')}</div></article><article class="reference-card"><h3>Hoạt động gần đây</h3><div class="live-feed"><p><i></i><span><b>purchase_completed</b><small>Hà Nội · 10 giây trước</small></span></p><p><i></i><span><b>checkout_started</b><small>TP.HCM · 24 giây trước</small></span></p><p><i></i><span><b>product_viewed</b><small>Đà Nẵng · 41 giây trước</small></span></p></div></article></div>`;
+  if (type === 'funnel') return `${webHeading(title,description,'Tạo Funnel')}${webKpis([['TỶ LỆ HOÀN TẤT','12.5%','+2.4%'],['THỜI GIAN TB','8m 42s','-1.1%'],['ĐIỂM RƠI LỚN NHẤT','Giỏ hàng',''],['TỔNG NGƯỜI DÙNG','58K','+5.8%']])}<article class="reference-card funnel-card"><h3>Users theo bước chuyển đổi</h3><div class="funnel-visual"><span style="width:92%">Truy cập · 124,592</span><span style="width:76%">Xem sản phẩm · 94,018</span><span style="width:59%">Thêm giỏ hàng · 52,809</span><span style="width:43%">Bắt đầu checkout · 28,420</span><span style="width:29%">Hoàn tất · 15,574</span></div></article>`;
+  if (type === 'retention') return `${webHeading(title,description)}${webKpis([['DAY 1 RETENTION','61%','+2.4%'],['DAY 7 RETENTION','32%','-1.1%'],['DAY 14 RETENTION','24%','+0.5%'],['DAY 30 RETENTION','18%','+3.2%']])}<article class="reference-card retention-card"><h3>Retention theo thời gian</h3><div class="retention-lines"><i></i><i></i><i></i><i></i></div><div class="chart-labels"><span>Ngày 0</span><span>Ngày 7</span><span>Ngày 14</span><span>Ngày 21</span><span>Ngày 30</span></div></article><div class="info-banner"><i class="ph-fill ph-lightbulb"></i><div><b>Thông tin chi tiết</b><p>Organic Search có Day-30 Retention cao hơn 18% so với mức trung bình.</p></div></div>`;
+  if (type === 'cohort') return `${webHeading(title,description)}${webKpis([['COHORT TỐT NHẤT','T4/W2','+12.5%'],['RETENTION TRUNG BÌNH','18.4%','+2.1%'],['THAY ĐỔI KỲ TRƯỚC','+5.2%',''],['USER PHÂN TÍCH','12.4K','']])}<article class="reference-card"><h3>Retention theo Cohort</h3><div class="cohort-grid">${Array.from({length:48},(_,i)=>`<span style="opacity:${Math.max(.15,1-(i%8)*.11)}">${i%8===0?'100%':Math.max(12,58-(i%8)*7)+'%'}</span>`).join('')}</div></article>`;
+  if (type === 'insights') return `${webHeading(title,description,'Hỏi Nexus AI')}<div class="ai-hero"><i class="ph-fill ph-sparkle"></i><div><small>ĐIỂM NỔI BẬT HÔM NAY</small><h2>Traffic từ Organic Search tăng mạnh trong 7 ngày qua</h2><p>Nexus AI phát hiện mức tăng 23%, đóng góp thêm khoảng ₫18.4K doanh thu.</p></div><button>Khám phá nguyên nhân</button></div><div class="web-section-grid"><article><i class="ph ph-trend-up"></i><h3>Cơ hội tăng trưởng</h3><p>Summer Sale đang có ROAS tốt hơn 32% so với dự kiến.</p></article><article><i class="ph ph-warning"></i><h3>Mobile cần chú ý</h3><p>Bounce rate tăng 9% tại trang checkout.</p></article><article><i class="ph ph-users"></i><h3>Nhóm khách hàng mới</h3><p>Khách Organic có khả năng quay lại cao hơn 34%.</p></article></div>`;
+  if (['dashboards','reports'].includes(type)) { const cards = type==='reports' ? [['Báo cáo doanh thu Q3','revenue-analysis'],['Phân tích người dùng','segmentation'],['Báo cáo Cohort','cohort'],['Dự báo tháng 11','forecast']] : [['Marketing Overview','overview'],['Executive Dashboard','revenue-analysis'],['Product Analytics','funnel'],['Conversion Dashboard','journey'],['Revenue Performance','revenue-analysis'],['User Acquisition','segmentation']]; return `${webHeading(title,description,type==='reports'?'Tạo báo cáo':'Tạo Dashboard')}<div class="dashboard-gallery">${cards.map(([name,target],i)=>`<button data-web-screen="${target}"><div class="gallery-preview p${i%3+1}"><i></i><i></i><i></i><span></span></div><b>${name}</b><small>Cập nhật hôm nay</small><i class="ph ph-dots-three"></i></button>`).join('')}</div>`; }
+  if (type === 'sources') return `${webHeading(title,'Tải CSV/XLSX, kiểm tra dữ liệu và theo dõi từng lần nhập','Nhập từ tệp')}${ingestionWorkspace(false)}`;
+  if (type === 'quality') return `${webHeading(title,description,'Làm mới')}${webKpis([['ĐIỂM CHẤT LƯỢNG','94/100','+3'],['VẤN ĐỀ ĐANG MỞ','2','-1'],['NGUỒN CẦN CHÚ Ý','1',''],['ĐỘ TRỄ','0.3%','']])}<div class="reference-grid wide"><article class="reference-card"><h3>Điểm chất lượng dữ liệu theo thời gian</h3>${metricChart()}</article><article class="reference-card"><h3>Vấn đề cần xử lý</h3><div class="issue"><b>Facebook Ads đồng bộ chậm</b><p>Dữ liệu chậm hơn bình thường 45 phút.</p></div><div class="issue soft"><b>Thiếu trường campaign_id</b><p>1.2% bản ghi trong 24 giờ qua.</p></div></article></div>`;
+  if (['table','events','export','activity','alerts','anomaly'].includes(type)) return `${webHeading(title,description,type==='alerts'?'Tạo cảnh báo':'Tạo mới')}${webKpis([['TỔNG','24,502','+4.2%'],['ĐANG HOẠT ĐỘNG','12,183','+8.1%'],['CẦN CHÚ Ý','4','-2'],['CẬP NHẬT HÔM NAY','128','+12%']])}${miniTable([['Organic Search','Hoạt động','8,421','4.82%'],['Paid Social','Hoạt động','6,294','3.91%'],['Email Campaign','Theo dõi','4,105','3.24%'],['Referral','Hoạt động','2,890','2.81%']])}`;
+  if (type === 'builder') return `${webHeading(title,description,'Lưu Dashboard')}<div class="builder-layout"><aside><p>THÀNH PHẦN</p><button><i class="ph ph-number-square-one"></i>KPI</button><button><i class="ph ph-chart-line"></i>Line chart</button><button><i class="ph ph-chart-bar"></i>Bar chart</button><button><i class="ph ph-table"></i>Table</button></aside><div class="builder-canvas"><div class="builder-kpis">${webKpis([['REVENUE','124.5K',''],['USERS','45,210',''],['CONVERSION','3.2%','']])}</div><div class="drop-zone"><i class="ph ph-plus"></i><p>Kéo thành phần vào đây</p></div></div><aside class="properties"><p>THUỘC TÍNH</p><label>Tiêu đề<input value="Marketing Performance"></label><label>Nguồn<select><option>Google Analytics</option></select></label></aside></div>`;
+  if (type === 'explorer') return `${webHeading(title,description,'Lưu chế độ xem')}<div class="explorer-layout"><aside class="reference-card"><h3>Cấu hình truy vấn</h3><label>Dimensions<select><option>Source / Medium</option></select></label><label>Metrics<select><option>Active users</option></select></label><button class="dark-button">Chạy truy vấn</button></aside><article class="reference-card"><h3>Sessions theo ngày</h3><div class="reference-bars">${[30,46,38,67,55,83,72,95].map(v=>`<i style="height:${v}%"></i>`).join('')}</div></article></div>`;
+  if (['journey','revenue','forecast'].includes(type)) return `${webHeading(title,description)}${webKpis([['TỔNG','124,592','+12.5%'],['TRUNG BÌNH','12,549','+4.2%'],['DỰ BÁO','₫104,320','+8.5%'],['ĐỘ TIN CẬY','92%','']])}<article class="reference-card"><h3>${type==='journey'?'Luồng người dùng chính':'Xu hướng theo thời gian'}</h3>${type==='journey'?'<div class="journey-flow"><span>Landing page</span><i></i><span>Product</span><i></i><span>Cart</span><i></i><span>Purchase</span></div>':metricChart()}</article>`;
+  return `${webHeading(title,description)}<div class="web-section-grid"><article><i class="ph ph-user"></i><h3>Hồ sơ cá nhân</h3><p>Quản lý thông tin hiển thị và vai trò.</p></article><article><i class="ph ph-key"></i><h3>Bảo mật & API</h3><p>Quản lý mật khẩu, 2FA và API key.</p></article><article><i class="ph ph-bell"></i><h3>Thông báo</h3><p>Tùy chỉnh cảnh báo email và push.</p></article></div>`;
+}
+
+function showWebScreen(key) {
+  if (!authSession) return openPage('login');
+  if (key === 'members' && !['OWNER','ADMIN'].includes(authSession.workspace.role)) return showWebScreen('overview');
+  currentWebScreen = key;
+  document.querySelectorAll('.web-panel').forEach(panel => panel.classList.toggle('active', panel.id === (key === 'overview' ? 'overview-web-panel' : 'dynamic-web-panel')));
+  document.querySelectorAll('[data-web-screen]').forEach(button => button.classList.toggle('active', button.dataset.webScreen === key));
+  if (key !== 'overview') document.getElementById('dynamic-web-panel').innerHTML = renderWebPage(key);
+  if (key === 'members') loadWorkspaceMembers();
+  if (key === 'sources') loadImportHistory();
+  loadWebResource(key);
+  document.querySelector('.web-content').scrollTop = 0;
+}
+
+const NexusAPI = window.NexusAPI;
+
+function skeletonMarkup(count = 3) {
+  return `<div class="resource-skeleton" aria-label="Đang tải">${Array.from({length: count}, () => '<i></i>').join('')}</div>`;
+}
+
+function emptyMarkup(message = 'Chưa có dữ liệu phù hợp.') {
+  return `<div class="resource-state empty"><i class="ph ph-database"></i><b>Chưa có dữ liệu</b><p>${escapeHtml(message)}</p></div>`;
+}
+
+function errorMarkup(error, key) {
+  return `<div class="resource-state error"><i class="ph ph-warning-circle"></i><b>Không thể tải dữ liệu</b><p>${escapeHtml(error?.message || 'Đã xảy ra lỗi.')}</p><button data-resource-retry="${escapeHtml(key)}">Thử lại</button></div>`;
+}
+
+function blockedMarkup(message) {
+  return `<div class="resource-state blocked"><i class="ph ph-lock-key"></i><b>BLOCKED</b><p>${escapeHtml(message)}</p></div>`;
+}
+
+function resourceToolbar(key) {
+  const filter = key.includes('alerts')
+    ? '<select data-resource-filter><option value="">Tất cả</option><option value="unread_only=true">Chưa đọc</option><option value="severity=high">Nghiêm trọng</option></select>'
+    : key.includes('reports')
+      ? '<select data-resource-filter><option value="">Mọi trạng thái</option><option value="status=ready">Sẵn sàng</option><option value="status=draft">Bản nháp</option></select>'
+      : key.includes('import-history')
+        ? '<select data-resource-filter><option value="">Mọi trạng thái</option><option value="status=COMPLETED">Hoàn tất</option><option value="status=FAILED">Thất bại</option><option value="status=PROCESSING">Đang xử lý</option></select>'
+      : key.includes('sources')
+        ? '<select data-resource-filter><option value="">Mọi trạng thái</option><option value="status=connected">Đã kết nối</option><option value="status=completed">Hoàn tất</option><option value="status=warning">Cần chú ý</option></select>'
+        : key.includes('saved')
+          ? '<select data-resource-filter><option value="">Tất cả</option><option value="is_favorite=true">Yêu thích</option></select>' : '';
+  return `<div class="resource-toolbar" data-resource-controls="${key}"><label><i class="ph ph-magnifying-glass"></i><input data-resource-search="${key}" placeholder="Tìm kiếm..."></label>${filter}<select data-resource-sort><option value="desc">Mới nhất</option><option value="asc">Cũ nhất</option></select></div>`;
+}
+
+function dateToolbar(key) {
+  return `<div class="resource-toolbar date-toolbar" data-resource-controls="${key}"><select data-resource-days><option value="7">7 ngày</option><option value="30">30 ngày</option><option value="90">90 ngày</option></select><label>Từ<input type="date" data-resource-date-from></label><label>Đến<input type="date" data-resource-date-to></label><button data-resource-retry="${key}"><i class="ph ph-arrow-clockwise"></i> Làm mới</button></div>`;
+}
+
+function queryFor(key) {
+  if (!resourceQuery.has(key)) resourceQuery.set(key, { page: 1, page_size: 10, sort_order: 'desc' });
+  return resourceQuery.get(key);
+}
+
+function analyticsQuery(key, fallbackDays) {
+  const query = queryFor(key);
+  return query.date_from && query.date_to
+    ? {date_from: query.date_from, date_to: query.date_to}
+    : {days: query.days || fallbackDays};
+}
+
+function pagerMarkup(key, pagination) {
+  if (!pagination || pagination.total_pages <= 1) return '';
+  return `<nav class="resource-pager" aria-label="Phân trang"><button data-resource-page="${key}" data-page="${pagination.page - 1}" ${pagination.page <= 1 ? 'disabled' : ''}><i class="ph ph-caret-left"></i></button><span>Trang ${pagination.page} / ${pagination.total_pages} · ${pagination.total} mục</span><button data-resource-page="${key}" data-page="${pagination.page + 1}" ${pagination.page >= pagination.total_pages ? 'disabled' : ''}><i class="ph ph-caret-right"></i></button></nav>`;
+}
+
+function resourceHosts(key) {
+  return [...document.querySelectorAll(`[data-resource-host="${key}"]`)];
+}
+
+function setResourceHtml(key, html) {
+  resourceHosts(key).forEach(host => { host.innerHTML = html; });
+}
+
+function formatDate(value) {
+  if (!value) return 'Chưa cập nhật';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString('vi-VN');
+}
+
+function mobileRows(key, items) {
+  if (key === 'reports') return items.map(item => `<button disabled><span class="page-list-icon"><i class="ph ph-file-text"></i></span><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.report_type)} · ${escapeHtml(item.status)} · ${formatDate(item.updated_at)}</small></span><span class="status-pill">${escapeHtml(item.status)}</span></button>`).join('');
+  if (key === 'saved-views') return items.map(item => `<button data-route="${({traffic:'traffic',revenue:'revenue',funnel:'conversion'})[item.view_type] || 'users'}"><span class="page-list-icon"><i class="ph ph-bookmark-simple"></i></span><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.description)} · ${escapeHtml(item.view_type)}</small></span>${item.is_favorite ? '<i class="ph-fill ph-star"></i>' : '<i class="ph ph-caret-right"></i>'}</button>`).join('');
+  if (key === 'data-sources') return items.map(item => `<button disabled><span class="page-list-icon"><i class="ph ph-database"></i></span><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.source_type)} · ${formatDate(item.last_sync || item.last_import_at)}</small></span><span class="status-pill">${escapeHtml(item.health_status || item.status)}</span></button>`).join('');
+  return '';
+}
+
+function webTable(items, columns) {
+  return `<div class="reference-table"><table><thead><tr>${columns.map(column => `<th>${column.label}</th>`).join('')}</tr></thead><tbody>${items.map(item => `<tr>${columns.map(column => `<td>${column.render ? column.render(item) : escapeHtml(item[column.key])}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function webRows(key, items) {
+  if (key === 'web-reports') return webTable(items, [
+    {label:'BÁO CÁO',render:item=>`<b>${escapeHtml(item.name)}</b>`}, {label:'LOẠI',key:'report_type'},
+    {label:'TRẠNG THÁI',render:item=>`<span class="status-pill">${escapeHtml(item.status)}</span>`}, {label:'CẬP NHẬT',render:item=>formatDate(item.updated_at)}
+  ]);
+  if (key === 'web-alerts') return webTable(items, [
+    {label:'CẢNH BÁO',render:item=>`<b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.description)}</small>`}, {label:'MỨC ĐỘ',key:'severity'},
+    {label:'TRẠNG THÁI',render:item=>item.is_read ? 'Đã đọc' : 'Chưa đọc'}, {label:'THỜI GIAN',render:item=>formatDate(item.created_at)}
+  ]);
+  if (key === 'web-insights') return `<div class="web-section-grid">${items.map(item => `<article><i class="ph ${item.insight_type === 'warning' ? 'ph-warning' : 'ph-trend-up'}"></i><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.description)}</p><span class="status-pill">${escapeHtml(item.change_value || item.severity)}</span></article>`).join('')}</div>`;
+  if (key === 'web-sources') return webTable(items, [
+    {label:'NGUỒN',render:item=>`<b>${escapeHtml(item.name)}</b>`}, {label:'LOẠI',key:'source_type'},
+    {label:'TRẠNG THÁI',render:item=>`<span class="status-pill">${escapeHtml(item.health_status || item.status)}</span>`}, {label:'BẢN GHI',render:item=>String(item.event_count || 0)}, {label:'LẦN NHẬP CUỐI',render:item=>formatDate(item.last_import_at || item.last_sync)}
+  ]);
+  return '';
+}
+
+const listResourceApi = {
+  reports: query => NexusAPI.reports(query),
+  'saved-views': query => NexusAPI.savedViews(query),
+  'data-sources': query => NexusAPI.dataSources(query),
+  'web-reports': query => NexusAPI.reports(query),
+  'web-alerts': query => NexusAPI.alerts(query),
+  'web-insights': query => NexusAPI.insights(query),
+  'web-sources': query => NexusAPI.dataSources(query)
+};
+
+function reloadResource(key, force = false) {
+  if (listResourceApi[key]) return loadListResource(key, force);
+  if (key === 'global-search') return loadGlobalSearch(force);
+  if (key === 'mobile-alerts') return loadMobileAlerts(force);
+  if (key === 'mobile-insights') return loadMobileInsights(force);
+  if (key === 'mobile-analytics') return loadMobileAnalytics(force);
+  if (key === 'account') return loadAccount(force);
+  if (key === 'edit-profile') return loadEditProfile(force);
+  if (key === 'import-history') return loadImportHistory(force);
+  if (key === 'overview') return loadBackendData(7, force);
+  if (key.startsWith('metric-')) return loadMetricPage(key.slice(7), force);
+  if (key.startsWith('web-')) {
+    const match = Object.entries(webPages).find(([,config]) => config[2] === key.slice(4));
+    if (match) return loadWebResource(match[0], force);
+  }
+}
+
+async function loadListResource(key, force = false) {
+  const api = listResourceApi[key];
+  if (!api || !resourceHosts(key).length) return;
+  setResourceHtml(key, skeletonMarkup(key.startsWith('web-') ? 4 : 3));
+  try {
+    const query = {...queryFor(key)};
+    const response = await resourceRequests.run(key, signal => api(query, {signal, force}));
+    const state = window.NexusResource.listState(response);
+    if (state.status === 'empty') return setResourceHtml(key, emptyMarkup());
+    const rows = key.startsWith('web-') ? webRows(key, state.items) : mobileRows(key, state.items);
+    setResourceHtml(key, rows + pagerMarkup(key, state.pagination));
+  } catch (error) {
+    if (error?.code !== 'STALE_REQUEST') setResourceHtml(key, errorMarkup(error, key));
+  }
+}
+
+async function loadGlobalSearch(force = false) {
+  const key = 'global-search';
+  if (!resourceHosts(key).length) return;
+  const search = queryFor(key).search || '';
+  if (search.length < 2) return setResourceHtml(key, emptyMarkup('Nhập ít nhất 2 ký tự để tìm kiếm.'));
+  setResourceHtml(key, skeletonMarkup(3));
+  try {
+    const [reports, views, sources] = await resourceRequests.run(key, signal => Promise.all([
+      NexusAPI.reports({search,page_size:5},{signal,force}), NexusAPI.savedViews({search,page_size:5},{signal,force}), NexusAPI.dataSources({search,page_size:5},{signal,force})
+    ]));
+    const groups = [
+      ['BÁO CÁO', reports.data, item => `<button disabled><span class="page-list-icon"><i class="ph ph-file-text"></i></span><span><b>${escapeHtml(item.name)}</b><small>${escapeHtml(item.report_type)} · ${escapeHtml(item.status)}</small></span></button>`],
+      ['CHẾ ĐỘ XEM', views.data, item => mobileRows('saved-views',[item])],
+      ['NGUỒN DỮ LIỆU', sources.data, item => mobileRows('data-sources',[item])]
     ];
+    const html = groups.filter(([,items]) => items.length).map(([label,items,render]) => `<p class="group-label">${label}</p>${items.map(render).join('')}`).join('');
+    setResourceHtml(key, html || emptyMarkup(`Không tìm thấy kết quả cho “${search}”.`));
+  } catch (error) {
+    if (error?.code !== 'STALE_REQUEST') setResourceHtml(key, errorMarkup(error,key));
+  }
+}
 
-    clusters.forEach(c => {
-        const clusterId = c.cluster % 4; // Ensure it maps to 0-3
-        datasets[clusterId].data.push({ x: c.monetary, y: c.frequency, id: c.id });
-    });
+async function loadWebGlobalSearch(force = false) {
+  const search = queryFor('web-global-search').search || '';
+  const dynamic = document.getElementById('dynamic-web-panel');
+  if (search.length < 2) return;
+  document.querySelectorAll('.web-panel').forEach(panel => panel.classList.toggle('active', panel === dynamic));
+  document.querySelectorAll('[data-web-screen]').forEach(button => button.classList.remove('active'));
+  dynamic.innerHTML = `${webHeading('Tìm kiếm Workspace',`Kết quả thật cho “${escapeHtml(search)}”`,'Chưa khả dụng')}<div class="resource-host web-search-results" data-resource-host="web-global-search">${skeletonMarkup(4)}</div>`;
+  try {
+    const [reports, views, sources] = await resourceRequests.run('web-global-search', signal => Promise.all([
+      NexusAPI.reports({search,page_size:10},{signal,force}), NexusAPI.savedViews({search,page_size:10},{signal,force}), NexusAPI.dataSources({search,page_size:10},{signal,force})
+    ]));
+    const rows = [
+      ...reports.data.map(item=>({kind:'Báo cáo',name:item.name,status:item.status})),
+      ...views.data.map(item=>({kind:'Chế độ xem',name:item.name,status:item.view_type})),
+      ...sources.data.map(item=>({kind:'Nguồn dữ liệu',name:item.name,status:item.health_status || item.status}))
+    ];
+    setResourceHtml('web-global-search', rows.length ? webTable(rows,[{label:'LOẠI',key:'kind'},{label:'TÊN',render:item=>`<b>${escapeHtml(item.name)}</b>`},{label:'TRẠNG THÁI',render:item=>`<span class="status-pill">${escapeHtml(item.status)}</span>`}]) : emptyMarkup(`Không tìm thấy kết quả cho “${search}”.`));
+  } catch (error) { if (error?.code !== 'STALE_REQUEST') setResourceHtml('web-global-search',errorMarkup(error,'web-global-search')); }
+}
 
-    deepSegmentChart = new Chart(ctx, {
-        type: 'scatter',
-        data: { datasets: datasets },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    title: { display: true, text: 'Giá trị đơn hàng (Monetary)', color: '#94a3b8' },
-                    grid: { color: 'rgba(255,255,255,0.05)' },
-                    ticks: { color: '#94a3b8' }
-                },
-                y: {
-                    title: { display: true, text: 'Tần suất mua (Frequency)', color: '#94a3b8' },
-                    grid: { color: 'rgba(255,255,255,0.05)' },
-                    ticks: { color: '#94a3b8' }
-                }
-            },
-            plugins: {
-                legend: { position: 'bottom', labels: { color: '#94a3b8', usePointStyle: true } },
-                tooltip: {
-                    callbacks: {
-                        label: function(ctx) {
-                            return `KH #${ctx.raw.id}: ${Math.round(ctx.raw.x).toLocaleString('vi-VN')}đ - ${ctx.raw.y} lần`;
-                        }
-                    }
-                }
-            }
-        }
-    });
+async function loadMobileScreen(name) {
+  if (name === 'analytics') return loadMobileAnalytics();
+  if (name === 'insights') return loadMobileInsights();
+  if (name === 'alerts') return loadMobileAlerts();
+}
 
-    const topList = document.getElementById('top-customers-list');
-    if (topList) {
-        const vips = clusters.filter(c => c.cluster === 0).slice(0, 5);
-        topList.innerHTML = vips.map(c => `
-            <div class="rec-item">
-                <div class="rec-info"><h4>Khách hàng #${c.id}</h4><p>Mức chi tiêu: ${Math.round(c.monetary).toLocaleString()}đ</p></div>
-                <div class="trend up">VIP AI</div>
-            </div>
-        `).join('');
+async function loadMobileAnalytics(force = false) {
+  const host = document.querySelector('#analytics-screen .screen-scroll');
+  if (!host) return;
+  host.classList.add('is-loading');
+  setText('#analytics-screen .analysis-card h2', '—');
+  const initialList = document.querySelector('#analytics-screen .channel-list');
+  if (initialList) initialList.innerHTML = skeletonMarkup(3);
+  try {
+    const response = await resourceRequests.run('mobile-analytics', signal => NexusAPI.revenue(analyticsQuery('mobile-analytics',30),{signal,force}));
+    const daily = response.data.daily || [];
+    const total = daily.reduce((sum,row) => sum + Number(row.revenue || 0), 0);
+    setText('#analytics-screen .analysis-card h2', formatCurrency(total));
+    const bars = document.querySelector('#analytics-screen .mini-bars');
+    if (bars) {
+      const recent = daily.slice(-7); const max = Math.max(...recent.map(row => Number(row.revenue || 0)), 1);
+      bars.innerHTML = recent.map(row => `<i style="height:${Math.max(8, Number(row.revenue || 0) / max * 100)}%" title="${escapeHtml(row.label)}"></i>`).join('');
     }
+    const groups = response.data.by_category || [];
+    const list = document.querySelector('#analytics-screen .channel-list');
+    if (list) list.innerHTML = groups.length ? groups.map((row,index) => `<button data-page="revenue"><span class="channel-icon ${index%2?'facebook':'google'}">${escapeHtml(String(row.name || '?').slice(0,1))}</span><span><b>${escapeHtml(row.name)}</b><small>Dữ liệu đã nhập</small></span><strong>${formatCurrency(row.revenue)}</strong><i class="ph ph-caret-right"></i></button>`).join('') : emptyMarkup();
+  } catch (error) {
+    if (error?.code !== 'STALE_REQUEST') host.insertAdjacentHTML('afterbegin', errorMarkup(error,'mobile-analytics'));
+  } finally { host.classList.remove('is-loading'); }
 }
 
-// --- DATA LOGIC (STABLE) ---
-
-// ============================================================
-// UP-SELL AI ENGINE
-// ============================================================
-
-function generateUpSellRecommendations() {
-    const container = document.getElementById('recommendation-list');
-    if (!container) return;
-
-    if (!filteredData.length || !columns.length) {
-        container.innerHTML = `<div class="upsell-empty"><i class="ph ph-robot"></i>Tải dữ liệu để AI phân tích gợi ý</div>`;
-        return;
-    }
-
-    const amtCol  = columns.find(c => /amount|salary/i.test(c)) || columns[1];
-    const catCol  = columns.find(c => /category/i.test(c));
-    const idCol   = columns.find(c => /customerid|^id$/i.test(c)) || columns[0];
-    const prodCol = columns.find(c => /product/i.test(c));
-
-    if (!prodCol) {
-        container.innerHTML = `<div class="upsell-empty"><i class="ph ph-package"></i>Cần cột 'Product' trong CSV để phân tích</div>`;
-        return;
-    }
-
-    // Build frequency + revenue maps
-    const prodFreq = {}; const prodRevenue = {}; const catRevenue = {};
-    const custProds = {};  // customer -> Set of products
-
-    filteredData.forEach(row => {
-        const prod = row[prodCol]; if (!prod) return;
-        const cat  = row[catCol]  || 'Other';
-        const id   = row[idCol]   || 'unknown';
-        let amt = parseFloat(String(row[amtCol] || '').replace(/[^0-9.-]/g, '')) || 0;
-
-        prodFreq[prod]    = (prodFreq[prod]    || 0) + 1;
-        prodRevenue[prod] = (prodRevenue[prod] || 0) + amt;
-        catRevenue[cat]   = (catRevenue[cat]   || 0) + amt;
-        if (!custProds[id]) custProds[id] = new Set();
-        custProds[id].add(prod);
-    });
-
-    const totalRevenue = Object.values(catRevenue).reduce((a,b) => a+b, 0) || 1;
-    const totalCusts   = Object.keys(custProds).length || 1;
-    const allProds     = Object.keys(prodFreq).sort((a,b) => prodRevenue[b] - prodRevenue[a]);
-
-    // Score each product
-    const recommendations = allProds.slice(0, 5).map((prod, rank) => {
-        const buyers    = new Set(filteredData.filter(r => r[prodCol] === prod).map(r => r[idCol]));
-        const cat       = filteredData.find(r => r[prodCol] === prod)?.[catCol] || 'Other';
-        const catShare  = catRevenue[cat] / totalRevenue;
-        const popScore  = buyers.size / totalCusts;       // 0-1
-        const revScore  = prodRevenue[prod] / totalRevenue; // 0-1
-        const rankBonus = (allProds.length - rank) / allProds.length; // 0-1
-
-        // Confidence: weighted blend, capped 45-97
-        const raw = 45 + popScore * 25 + revScore * 15 + rankBonus * 12;
-        const confidence = Math.min(97, Math.round(raw));
-        const confClass  = confidence >= 80 ? 'high' : confidence >= 60 ? 'medium' : 'low';
-
-        const potential  = totalCusts - buyers.size;
-        const avgRevenue = Math.round(prodRevenue[prod] / (prodFreq[prod] || 1));
-
-        return { prod, cat, confidence, confClass, buyers: buyers.size, potential, avgRevenue };
-    });
-
-    // Render
-    container.innerHTML = recommendations.map(r => `
-        <div class="upsell-card">
-            <div class="upsell-img-wrap">
-                <img src="${getProductImage(r.prod, r.cat)}" alt="${r.prod}" loading="lazy"
-                     onerror="this.src='https://picsum.photos/seed/${r.prod.length * 13}/62/62'">
-                <span class="upsell-cat-badge">${r.cat}</span>
-            </div>
-            <div class="upsell-info">
-                <div class="upsell-name" title="${r.prod}">${r.prod}</div>
-                <div class="upsell-meta">
-                    <span>💡 ${r.potential} KH tiềm năng</span>
-                    <span>~${r.avgRevenue.toLocaleString('vi-VN')}đ</span>
-                </div>
-                <div class="upsell-confidence-wrap">
-                    <div class="upsell-confidence-bar">
-                        <div class="upsell-confidence-fill ${r.confClass}" data-w="${r.confidence}"></div>
-                    </div>
-                    <span class="upsell-confidence-label">${r.confidence}%</span>
-                </div>
-                <div class="upsell-confidence-text">Độ tin cậy AI</div>
-            </div>
-        </div>
-    `).join('');
-
-    // Animate bars after DOM paint
-    requestAnimationFrame(() => {
-        container.querySelectorAll('.upsell-confidence-fill[data-w]').forEach(el => {
-            el.style.width = el.dataset.w + '%';
-        });
-    });
+async function loadMobileInsights(force = false) {
+  const host = document.querySelector('#insights-screen .screen-scroll');
+  if (!host) return;
+  host.innerHTML = skeletonMarkup(4);
+  try {
+    const response = await resourceRequests.run('mobile-insights', signal => NexusAPI.insights({page_size:20},{signal,force}));
+    if (!response.data.length) return void (host.innerHTML = emptyMarkup());
+    const [featured,...items] = response.data;
+    host.innerHTML = `<div class="page-heading compact"><div><p class="eyebrow">DỮ LIỆU WORKSPACE</p><h1>Insights</h1></div><span class="pill">${response.meta.pagination.total}</span></div><article class="featured-insight"><span><i class="ph-fill ph-sparkle"></i></span><p>${escapeHtml(featured.insight_type)}</p><h2>${escapeHtml(featured.title)}</h2><button data-action="detail" data-title="${escapeHtml(featured.title)}" data-description="${escapeHtml(featured.description)}">Xem phân tích <i class="ph ph-arrow-right"></i></button></article><div class="insight-timeline">${items.map(item => `<button class="timeline-item" data-action="detail" data-title="${escapeHtml(item.title)}" data-description="${escapeHtml(item.description)}"><i class="ph-fill ${item.insight_type==='warning'?'ph-warning':'ph-lightbulb'}"></i><span><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.description)}</small></span><em>${escapeHtml(item.change_value || item.severity)}</em></button>`).join('')}</div>`;
+  } catch (error) { if (error?.code !== 'STALE_REQUEST') host.innerHTML = errorMarkup(error,'mobile-insights'); }
 }
 
-function getProductImage(product, category) {
-    const p = product.toLowerCase();
-    // Product keyword → Unsplash photo ID
-    if (/iphone|samsung.*phone|điện thoại/i.test(p)) return 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=62&h=62&fit=crop&q=80';
-    if (/macbook|laptop|notebook/i.test(p))              return 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=62&h=62&fit=crop&q=80';
-    if (/ipad|tablet/i.test(p))                          return 'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=62&h=62&fit=crop&q=80';
-    if (/airpod|headphone|sony.*wh|tai nghe/i.test(p))   return 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=62&h=62&fit=crop&q=80';
-    if (/mouse|chuột/i.test(p))                          return 'https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=62&h=62&fit=crop&q=80';
-    if (/keyboard|keychron|bàn phím/i.test(p))           return 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=62&h=62&fit=crop&q=80';
-    if (/chair|ghế/i.test(p))                           return 'https://images.unsplash.com/photo-1506439773649-6e0eb8cfb237?w=62&h=62&fit=crop&q=80';
-    if (/desk|bàn/i.test(p))                             return 'https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=62&h=62&fit=crop&q=80';
-    if (/case|ốp/i.test(p))                              return 'https://images.unsplash.com/photo-1553545204-4f7d339aa06a?w=62&h=62&fit=crop&q=80';
-    if (/cooling|pad|tản nhiệt/i.test(p))              return 'https://images.unsplash.com/photo-1593640408182-31c228b52a9b?w=62&h=62&fit=crop&q=80';
-    if (/asus|rog|gaming/i.test(p))                       return 'https://images.unsplash.com/photo-1587202372634-32705e3bf49c?w=62&h=62&fit=crop&q=80';
-    // Fallback by category
-    const catMap = {
-        'Electronics': 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=62&h=62&fit=crop&q=80',
-        'Accessories': 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=62&h=62&fit=crop&q=80',
-        'Furniture':   'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=62&h=62&fit=crop&q=80',
-    };
-    return catMap[category] || `https://picsum.photos/seed/${product.length * 17}/62/62`;
+async function loadMobileAlerts(force = false) {
+  const host = document.querySelector('#alerts-screen .alert-list');
+  if (!host) return;
+  host.innerHTML = skeletonMarkup(3);
+  try {
+    const response = await resourceRequests.run('mobile-alerts', signal => NexusAPI.alerts({page_size:20},{signal,force}));
+    if (!response.data.length) return void (host.innerHTML = emptyMarkup());
+    host.innerHTML = response.data.map(item => `<article class="alert ${escapeHtml(item.severity)}"><span><i class="ph-fill ${item.severity==='high'?'ph-warning-octagon':'ph-info'}"></i></span><div><p class="alert-tag">${escapeHtml(item.severity.toUpperCase())} · ${formatDate(item.created_at)}</p><h2>${escapeHtml(item.title)}</h2><p>${escapeHtml(item.description)}</p><button data-action="detail" data-title="${escapeHtml(item.title)}" data-description="${escapeHtml(item.description)}">Xem chi tiết</button>${!item.is_read && ['OWNER','ADMIN','ANALYST'].includes(authSession?.workspace?.role) ? `<button class="mark-read" data-alert-read="${item.id}">Đánh dấu đã đọc</button>` : ''}</div></article>`).join('');
+  } catch (error) { if (error?.code !== 'STALE_REQUEST') host.innerHTML = errorMarkup(error,'mobile-alerts'); }
 }
 
-function processFile(file) {
-    if (!window.Papa) {
-        showToast('Chua tai duoc thu vien doc CSV. Hay refresh trang roi thu lai.', 'error', 'ph-warning');
-        return;
-    }
-
-    showToast(`Dang doc file ${file.name}...`, 'info', 'ph-file-csv');
-
-    Papa.parse(file, {
-        header: true, dynamicTyping: true, skipEmptyLines: true,
-        complete: function(results) {
-            if (results.errors?.length) {
-                console.warn('CSV parse errors:', results.errors);
-            }
-
-            const rows = (results.data || []).filter(row =>
-                row && Object.values(row).some(value => value !== null && value !== undefined && String(value).trim() !== '')
-            );
-            const fields = (results.meta.fields || []).filter(Boolean);
-
-            if (!rows.length || !fields.length) {
-                showToast('File CSV rong hoac khong co dong tieu de hop le.', 'error', 'ph-warning');
-                return;
-            }
-
-            currentData = rows;
-            columns = fields;
-            initDashboard();
-            showToast(`Da nap ${rows.length.toLocaleString('vi-VN')} dong du lieu.`, 'success', 'ph-check-circle');
-        },
-        error: function(error) {
-            console.error('CSV parse failed:', error);
-            showToast('Khong doc duoc file CSV. Hay kiem tra dinh dang file.', 'error', 'ph-warning');
-        }
-    });
+async function loadSecondaryResource(page) {
+  if (listResourceApi[page]) return loadListResource(page);
+  if (page === 'global-search') return;
+  if (page === 'account') return loadAccount();
+  if (page === 'edit-profile') return loadEditProfile();
+  if (['revenue','traffic','conversion'].includes(page)) return loadMetricPage(page);
 }
 
-function initDashboard() {
-    const loader = document.getElementById('loading-overlay');
-    if (loader) loader.classList.remove('hidden');
-    setTimeout(() => {
-        try {
-            const zone = document.getElementById('upload-zone');
-            const dash = document.getElementById('dashboard');
-            if (zone) zone.classList.add('hidden');
-            if (dash) dash.classList.remove('hidden');
-            // Reset filters and populate chips from new data
-            resetAllFilters(false);
-            populateCategoryFilter();
-            populateFilterChips();
-            filteredData = [...currentData];
-            try {
-                runAIAnalytics();
-            } catch (err) {
-                console.error('Analytics render failed:', err);
-                showToast('Da nap du lieu, nhung bieu do chua san sang. Hay refresh neu can.', 'error', 'ph-chart-line');
-            }
-            applyFilters();
-        } finally {
-            if (loader) loader.classList.add('hidden');
-        }
-    }, 100);
+async function loadAccount(force = false) {
+  try {
+    const response = await resourceRequests.run('account', signal => NexusAPI.profile({signal,force}));
+    if (currentPage !== 'account') return;
+    const item = response.data;
+    secondaryContent.innerHTML = `<div class="secondary-heading"><p class="eyebrow">NEXUS ACCOUNT</p><h1>Thông tin tài khoản</h1></div><div class="settings-detail">${[['Họ và tên',item.full_name],['Email',item.email],['Vai trò',item.role],['Workspace',item.workspace]].map(([label,value]) => `<div class="settings-readonly"><span><small>${label}</small><b>${escapeHtml(value)}</b></span></div>`).join('')}</div>`;
+  } catch (error) { if (error?.code !== 'STALE_REQUEST') secondaryContent.innerHTML = errorMarkup(error,'account'); }
 }
 
-function runAIAnalytics() {
-    const monthlySales = getMonthlySales();
-    updateForecastChart(monthlySales, calculateForecast(monthlySales));
-    const segments = calculateRFM();
-    updateSegmentChart(segments);
-    generateAIInsights(monthlySales, segments, analyzeSentiment());
-    generateUpSellRecommendations();
+async function loadEditProfile(force = false) {
+  try {
+    const response = await resourceRequests.run('edit-profile', signal => NexusAPI.profile({signal,force}));
+    if (currentPage !== 'edit-profile') return;
+    const values = [response.data.full_name,response.data.job_title,response.data.email,response.data.phone];
+    secondaryContent.querySelectorAll('.mobile-form input').forEach((input,index) => { input.value = values[index] || ''; });
+  } catch (error) {
+    const status = secondaryContent.querySelector('.form-status');
+    if (status && error?.code !== 'STALE_REQUEST') status.textContent = error.message;
+  }
 }
 
-function getMonthlySales() {
-    const months = {};
-    const dateCol = columns.find(c => c.toLowerCase().includes('date')) || columns[0];
-    const amountCol = columns.find(c => c.toLowerCase().includes('amount') || c.toLowerCase().includes('salary')) || columns[1];
-
-    filteredData.forEach(row => {
-        if (row[dateCol]) {
-            const dateStr = String(row[dateCol]);
-            const month = dateStr.includes('-') ? dateStr.substring(0, 7) : 'Unknown';
-            // Robust number parsing (handle currency symbols/commas)
-            let val = row[amountCol];
-            if (typeof val === 'string') {
-                val = val.replace(/[^0-9.-]+/g, "");
-            }
-            months[month] = (months[month] || 0) + (parseFloat(val) || 0);
-        }
-    });
-    return Object.keys(months).sort().map(m => ({ month: m, total: months[m] }));
-}
-
-function calculateRFMDataRaw() {
-    const customers = {};
-    const idCol = columns.find(c => c.toLowerCase().includes('id')) || columns[0];
-    const amountCol = columns.find(c => c.toLowerCase().includes('amount') || c.toLowerCase().includes('salary')) || columns[1];
-    filteredData.forEach(row => {
-        const id = row[idCol];
-        if (!id) return;
-        if (!customers[id]) customers[id] = { count: 0, total: 0 };
-        customers[id].count++;
-        let val = row[amountCol];
-        if (typeof val === 'string') val = val.replace(/[^0-9.-]+/g, "");
-        customers[id].total += (parseFloat(val) || 0);
-    });
-    return customers;
-}
-
-function calculateRFM() {
-    const customers = calculateRFMDataRaw();
-    const segments = { 'VIP': 0, 'Tiềm năng': 0, 'Sắp rời bỏ': 0, 'Mới': 0 };
-    Object.keys(customers).forEach(id => {
-        const c = customers[id];
-        if (c.total > 50000000) segments['VIP']++;
-        else if (c.count > 3) segments['Tiềm năng']++;
-        else if (c.count === 1) segments['Mới']++;
-        else segments['Sắp rời bỏ']++;
-    });
-    return segments;
-}
-
-function calculateForecast(history) {
-    if (history.length < 2) return history[0]?.total || 0;
-    const last = history[history.length - 1].total;
-    const prev = history[history.length - 2].total;
-    return last * (last / (prev || 1));
-}
-
-/**
- * calculateSimulatedForecast – Hồi quy tuyến tính đơn giản dự báo N tháng tới.
- * Trả về mảng [{ds, yhat}] tương thích với renderForecastChartDeep.
- */
-function calculateSimulatedForecast(history, periods = 6) {
-    const n = history.length;
-    if (n === 0) return [];
-    if (n === 1) {
-        return Array.from({ length: periods }, (_, i) => ({
-            ds: shiftMonth(history[0].month, i + 1),
-            yhat: history[0].total
-        }));
-    }
-
-    // Tính hệ số hồi quy tuyến tính (Ordinary Least Squares)
-    const xMean = (n - 1) / 2;
-    const yMean = history.reduce((s, h) => s + h.total, 0) / n;
-    let num = 0, den = 0;
-    history.forEach((h, i) => {
-        num += (i - xMean) * (h.total - yMean);
-        den += (i - xMean) ** 2;
-    });
-    const slope = den === 0 ? 0 : num / den;
-    const intercept = yMean - slope * xMean;
-
-    return Array.from({ length: periods }, (_, i) => {
-        const x = n + i;
-        const yhat = Math.max(0, intercept + slope * x);
-        return { 
-            ds: shiftMonth(history[n - 1].month, i + 1), 
-            yhat: Math.round(yhat),
-            yhat_lower: Math.max(0, Math.round(yhat * 0.9)),
-            yhat_upper: Math.round(yhat * 1.1)
-        };
-    });
-}
-
-/** Dịch chuyển tháng YYYY-MM sang +offset tháng */
-function shiftMonth(yyyymm, offset) {
-    const [y, m] = yyyymm.split('-').map(Number);
-    const date = new Date(y, m - 1 + offset, 1);
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-/**
- * analyzeSentimentDeep: Tính điểm cảm xúc theo từng tháng dựa trên:
- * - Cột Rating (nếu có) chuẩn hóa 0–10
- * - Hoặc xu hướng doanh thu tương đối giữa các tháng
- * Trả về: { monthly: [{month, score}], overall, label, emoji }
- */
-function analyzeSentimentDeep(monthlySales) {
-    const ratingCol = columns.find(c =>
-        /rating|review|score|satisfaction|star/i.test(c)
-    );
-
-    let monthly = [];
-
-    if (ratingCol) {
-        // Group ratings by month
-        const byMonth = {};
-        const dateCol = columns.find(c => c.toLowerCase().includes('date')) || columns[0];
-        filteredData.forEach(row => {
-            const dateStr = String(row[dateCol] || '');
-            const month = dateStr.includes('-') ? dateStr.substring(0, 7) : 'Unknown';
-            let r = parseFloat(String(row[ratingCol]).replace(/[^0-9.]/g, '')) || null;
-            if (r === null) return;
-            // Chuẩn hóa về thang 10
-            if (r <= 5 && r >= 1) r = r * 2;
-            if (!byMonth[month]) byMonth[month] = [];
-            byMonth[month].push(Math.min(10, r));
-        });
-        monthly = Object.keys(byMonth).sort().map(m => ({
-            month: m,
-            score: parseFloat((byMonth[m].reduce((a, b) => a + b, 0) / byMonth[m].length).toFixed(1))
-        }));
+async function loadMetricPage(page, force = false) {
+  secondaryContent.classList.add('is-loading');
+  try {
+    let response;
+    if (page === 'revenue') response = await resourceRequests.run('metric-revenue', signal => NexusAPI.revenue({days:30},{signal,force}));
+    if (page === 'traffic') response = await resourceRequests.run('metric-traffic', signal => NexusAPI.overview({days:30},{signal,force}));
+    if (page === 'conversion') response = await resourceRequests.run('metric-conversion', signal => NexusAPI.funnel({days:30},{signal,force}));
+    if (currentPage !== page || !response) return;
+    if (page === 'revenue') {
+      const total = response.data.daily.reduce((sum,row) => sum + Number(row.revenue || 0), 0);
+      setText('#secondary-content .secondary-heading h1', formatCurrency(total));
+      const rows = response.data.by_category || [];
+      const container = secondaryContent.querySelector('.detail-rows');
+      if (container) container.innerHTML = rows.length ? rows.map(row => `<div><span>${escapeHtml(row.name)}</span><b>${formatCurrency(row.revenue)}</b></div>`).join('') : emptyMarkup();
+    } else if (page === 'traffic') {
+      setText('#secondary-content .secondary-heading h1', formatCompactNumber(response.data.summary.sessions));
+      const container = secondaryContent.querySelector('.detail-rows');
+      if (container) container.innerHTML = response.data.traffic_sources.map(row => `<div><span>${escapeHtml(row.name)}</span><b>${row.share}%</b></div>`).join('');
     } else {
-        // Fallback: dùng biến động doanh thu (tăng = tích cực)
-        monthly = monthlySales.map((m, i) => {
-            if (i === 0) return { month: m.month, score: 6.5 };
-            const prev = monthlySales[i - 1].total || 1;
-            const ratio = m.total / prev;
-            // ratio 1.2 = tăng 20% → ~8.5, ratio 0.8 = giảm 20% → ~5.0
-            const score = Math.min(10, Math.max(2, 5 + (ratio - 1) * 20));
-            return { month: m.month, score: parseFloat(score.toFixed(1)) };
-        });
+      setText('#secondary-content .secondary-heading h1', `${response.data.completion_rate}%`);
+      const container = secondaryContent.querySelector('.detail-rows');
+      if (container) container.innerHTML = response.data.steps.map(row => `<div><span>${escapeHtml(row.name)}</span><b>${row.rate}% · ${formatCompactNumber(row.users)}</b></div>`).join('');
     }
-
-    const overall = monthly.length
-        ? parseFloat((monthly.reduce((s, m) => s + m.score, 0) / monthly.length).toFixed(1))
-        : 6.5;
-
-    const label = overall >= 8 ? 'Rất tích cực'
-                : overall >= 6 ? 'Tích cực'
-                : overall >= 4 ? 'Trung lập'
-                : 'Tiêu cực';
-
-    const emoji = overall >= 8 ? '🤩'
-                : overall >= 6 ? '😊'
-                : overall >= 4 ? '😐'
-                : '😟';
-
-    return { monthly, overall, label, emoji };
+  } catch (error) {
+    if (error?.code !== 'STALE_REQUEST') secondaryContent.insertAdjacentHTML('afterbegin', errorMarkup(error,`metric-${page}`));
+  } finally { secondaryContent.classList.remove('is-loading'); }
 }
 
-/**
- * renderSentimentPanel: Vẽ sparkline + tags + progress bar vào KPI card.
- */
-let _sentimentSparkChart = null;
-
-function renderSentimentPanel({ monthly, overall, label, emoji }) {
-    // 1. Emoji
-    const emojiEl = document.getElementById('kpi-sentiment');
-    if (emojiEl) emojiEl.textContent = emoji;
-
-    // 2. Score label
-    const scoreEl = document.getElementById('sentiment-score');
-    if (scoreEl) scoreEl.textContent = `${overall}/10 – ${label}`;
-
-    // 3. Progress bar
-    const fill = document.getElementById('sentiment-bar-fill');
-    if (fill) {
-        const pct = (overall / 10) * 100;
-        const cls = overall >= 6 ? 'positive' : overall >= 4 ? 'neutral' : 'negative';
-        fill.style.width = `${pct}%`;
-        fill.className = `sentiment-score-fill ${cls}`;
-    }
-
-    // 4. Sparkline
-    const canvas = document.getElementById('sentimentSparkline');
-    if (canvas && monthly.length > 1) {
-        const ctx = canvas.getContext('2d');
-        if (_sentimentSparkChart) _sentimentSparkChart.destroy();
-
-        const grad = ctx.createLinearGradient(0, 0, 0, 48);
-        grad.addColorStop(0, 'rgba(99,102,241,0.35)');
-        grad.addColorStop(1, 'rgba(99,102,241,0)');
-
-        _sentimentSparkChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: monthly.map(m => m.month.slice(5)), // chỉ hiện MM
-                datasets: [{
-                    data: monthly.map(m => m.score),
-                    borderColor: overall >= 6 ? '#10b981' : overall >= 4 ? '#6366f1' : '#ef4444',
-                    backgroundColor: grad,
-                    fill: true,
-                    tension: 0.45,
-                    pointRadius: 0,
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 800 },
-                plugins: { legend: { display: false }, tooltip: { enabled: false } },
-                scales: {
-                    x: { display: false },
-                    y: { display: false, min: 0, max: 10 }
-                }
-            }
-        });
-    }
-
-    // 5. Tags từ khóa
-    const tagsEl = document.getElementById('sentiment-tags');
-    if (!tagsEl) return;
-
-    const tags = buildSentimentTags(overall);
-    tagsEl.innerHTML = tags.map(t =>
-        `<span class="s-tag ${t.type}">${t.icon} ${t.text}</span>`
-    ).join('');
+function webMetricHtml(title, kpis, content) {
+  return `${webKpis(kpis)}<article class="reference-card">${title ? `<h3>${escapeHtml(title)}</h3>` : ''}${content}</article>`;
 }
 
-/**
- * buildSentimentTags: Tạo danh sách tags dựa trên dữ liệu CSV + ngưỡng điểm
- */
-function buildSentimentTags(overall) {
-    const tags = [];
-
-    // Tags cố định theo ngưỡng
-    if (overall >= 8) {
-        tags.push({ text: 'Kỳ vọng cao', type: 'positive', icon: '⬆' });
-        tags.push({ text: 'Giới thiệu bạn bè', type: 'positive', icon: '💬' });
-        tags.push({ text: 'Mua lại', type: 'positive', icon: '🔄' });
-    } else if (overall >= 6) {
-        tags.push({ text: 'Hài lòng', type: 'positive', icon: '✔' });
-        tags.push({ text: 'Hỗ trợ tốt', type: 'positive', icon: '🏆' });
-    } else if (overall >= 4) {
-        tags.push({ text: 'Giá hợp lý', type: 'neutral', icon: '➖' });
-        tags.push({ text: 'Giao hàng chậm', type: 'negative', icon: '⏱' });
+async function loadWebResource(key, force = false) {
+  const type = webPages[key]?.[2];
+  const resourceKey = `web-${type}`;
+  if (listResourceApi[resourceKey]) return loadListResource(resourceKey, force);
+  const host = resourceHosts(resourceKey)[0];
+  if (!host || !['pulse','funnel','cohort','revenue'].includes(type)) return;
+  host.innerHTML = skeletonMarkup(4);
+  try {
+    let response;
+    if (type === 'pulse') response = await resourceRequests.run(resourceKey, signal => NexusAPI.realtime({}, {signal,force}));
+    if (type === 'funnel') response = await resourceRequests.run(resourceKey, signal => NexusAPI.funnel(analyticsQuery(resourceKey,7),{signal,force}));
+    if (type === 'cohort') response = await resourceRequests.run(resourceKey, signal => NexusAPI.cohort({signal,force}));
+    if (type === 'revenue') response = await resourceRequests.run(resourceKey, signal => NexusAPI.revenue(analyticsQuery(resourceKey,30),{signal,force}));
+    if (type === 'pulse') {
+      const rows = response.data || [];
+      const total = rows.reduce((sum,row) => sum + Number(row.Amount || 0),0);
+      host.innerHTML = rows.length ? webMetricHtml('Giao dịch gần nhất', [['GIAO DỊCH',formatCompactNumber(rows.length),''],['DOANH THU',formatCurrency(total),''],['KHÁCH HÀNG',formatCompactNumber(new Set(rows.map(row=>row.CustomerID)).size),'']], webTable(rows.slice(0,10), [{label:'MÃ ĐƠN',key:'OrderID'},{label:'DANH MỤC',key:'Category'},{label:'KHU VỰC',key:'Region'},{label:'GIÁ TRỊ',render:item=>formatCurrency(item.Amount)},{label:'THỜI GIAN',render:item=>formatDate(item.OrderDate)}])) : emptyMarkup();
+    } else if (type === 'funnel') {
+      const data = response.data;
+      host.innerHTML = webMetricHtml('Users theo bước chuyển đổi', [['TỶ LỆ HOÀN TẤT',`${data.completion_rate}%`,''],['TỔNG TRUY CẬP',formatCompactNumber(data.steps[0]?.users || 0),''],['HOÀN TẤT',formatCompactNumber(data.steps.at(-1)?.users || 0),'']], `<div class="funnel-visual">${data.steps.map(step=>`<span style="width:${Math.max(step.rate,22)}%">${escapeHtml(step.name)} · ${formatCompactNumber(step.users)} · ${step.rate}%</span>`).join('')}</div>`);
+    } else if (type === 'cohort') {
+      const data = response.data;
+      host.innerHTML = webMetricHtml('Retention theo Cohort', [['COHORT',String(data.cohorts.length),''],['NGƯỜI DÙNG',formatCompactNumber(data.cohorts.reduce((sum,row)=>sum+row.users,0)),'']], `<div class="cohort-grid">${data.cohorts.flatMap(row=>row.retention.map(value=>`<span style="opacity:${Math.max(.15,value/100)}">${value}%</span>`)).join('')}</div>`);
     } else {
-        tags.push({ text: 'Cần cải thiện', type: 'negative', icon: '⚠' });
-        tags.push({ text: 'Phản hồi xấu', type: 'negative', icon: '🔴' });
+      const data = response.data; const total = data.daily.reduce((sum,row)=>sum+Number(row.revenue||0),0);
+      host.innerHTML = webMetricHtml('Doanh thu theo ngày', [['TỔNG DOANH THU',formatCurrency(total),''],['ĐƠN HÀNG',formatCompactNumber(data.daily.reduce((sum,row)=>sum+Number(row.orders||0),0)),''],['KHU VỰC',String(data.by_region.length),'']], `<div class="reference-bars">${data.daily.slice(-14).map(row=>`<i style="height:${Math.max(6,Number(row.revenue||0)/(Math.max(...data.daily.map(item=>Number(item.revenue||0)),1))*100)}%" title="${escapeHtml(row.label)} · ${formatCurrency(row.revenue)}"></i>`).join('')}</div>`);
     }
-
-    // Tags động từ CSV
-    const ratingCol = columns.find(c => /rating|review|score|satisfaction|star/i.test(c));
-    if (ratingCol) tags.push({ text: 'Có đánh giá', type: 'neutral', icon: '⭐' });
-
-    const catCol = columns.find(c => c.toLowerCase().includes('category'));
-    if (catCol) {
-        const topCat = getMostFrequent(filteredData.map(r => r[catCol]).filter(Boolean));
-        if (topCat) tags.push({ text: topCat, type: 'neutral', icon: '🏷' });
-    }
-
-    return tags.slice(0, 5); // giới hạn 5 tags
+  } catch (error) { if (error?.code !== 'STALE_REQUEST') host.innerHTML = errorMarkup(error,resourceKey); }
 }
 
-/** Tìm giá trị xuất hiện nhiều nhất */
-function getMostFrequent(arr) {
-    const freq = {};
-    arr.forEach(v => { freq[v] = (freq[v] || 0) + 1; });
-    return Object.keys(freq).sort((a, b) => freq[b] - freq[a])[0] || null;
+function statusLabel(status) {
+  return ({UPLOADED:'Đã tải lên',PREVIEWED:'Đã xem trước',VALIDATING:'Đang kiểm tra',PROCESSING:'Đang nhập',COMPLETED:'Hoàn tất',FAILED:'Thất bại',CANCELLED:'Đã hủy'})[status] || status;
 }
 
-function analyzeSentiment() {
-    return { label: 'Tích cực', score: 8.5 };
+function setIngestionStatus(message, kind = '') {
+  document.querySelectorAll('.ingestion-status').forEach(container => {
+    container.className = `ingestion-status ${kind}`;
+    container.innerHTML = message ? `<i class="ph ${kind === 'error' ? 'ph-warning-circle' : kind === 'success' ? 'ph-check-circle' : 'ph-spinner-gap'}"></i><span>${escapeHtml(message)}</span>` : '';
+  });
 }
 
-// ============================================================
-// FILTERING SYSTEM
-// ============================================================
-
-/** Lấy dữ liệu đã lọc theo activeFilters */
-function getFilteredData() {
-    if (!currentData.length) return [];
-    const dateCol = columns.find(c => c.toLowerCase().includes('date')) || columns[0];
-    const regionCol = columns.find(c => /region|khu.?v[ựư]c|chi.?nh[aá]nh|branch|city|province/i.test(c));
-    const catCol = columns.find(c => c.toLowerCase().includes('category'));
-
-    return currentData.filter(row => {
-        // Date filter
-        if (activeFilters.dateFrom) {
-            const d = new Date(row[dateCol]);
-            if (isNaN(d) || d < new Date(activeFilters.dateFrom)) return false;
-        }
-        if (activeFilters.dateTo) {
-            const d = new Date(row[dateCol]);
-            if (isNaN(d) || d > new Date(activeFilters.dateTo + 'T23:59:59')) return false;
-        }
-        // Region filter
-        if (activeFilters.region !== 'all' && regionCol) {
-            if (row[regionCol] !== activeFilters.region) return false;
-        }
-        // Category filter
-        if (activeFilters.category !== 'all' && catCol) {
-            if (row[catCol] !== activeFilters.category) return false;
-        }
-        return true;
-    });
+function suggestedColumn(field, columns) {
+  const aliases = {
+    timestamp: ['timestamp','created_at','date','datetime','order_date','time'], revenue: ['revenue','amount','sales','total','value'],
+    event_id: ['event_id','order_id','id'], customer_id: ['customer_id','user_id','client_id'], category: ['category','type'],
+    region: ['region','country','location'], source: ['source','channel'], product: ['product','product_name','item'],
+    currency: ['currency','currency_code'], is_conversion: ['is_conversion','converted','conversion']
+  };
+  const normalize = value => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalized = new Map(columns.map(column => [normalize(column), column]));
+  return (aliases[field] || []).map(alias => normalized.get(normalize(alias))).find(Boolean) || '';
 }
 
-/** Áp dụng period preset vào dateFrom/dateTo */
-function applyPeriodPreset(period) {
-    const now = new Date();
-    const dateFromEl = document.getElementById('filter-date-from');
-    const dateToEl   = document.getElementById('filter-date-to');
-    if (period === 'all') {
-        activeFilters.dateFrom = '';
-        activeFilters.dateTo = '';
-        if (dateFromEl) dateFromEl.value = '';
-        if (dateToEl)   dateToEl.value = '';
-        return;
-    }
-    const toStr = now.toISOString().split('T')[0];
-    const monthOffsets = { month: 0, quarter: -2, half: -5, year: null };
-    let fromDate;
-    if (period === 'year') {
-        fromDate = new Date(now.getFullYear(), 0, 1);
+function renderImportPreview(payload) {
+  const preview = payload.preview;
+  const columns = preview.columns || [];
+  const headers = columns.map(column => `<th>${escapeHtml(column)}<small>${escapeHtml(preview.inferred_types?.[column] || 'STRING')}</small></th>`).join('');
+  const rows = (preview.rows || []).slice(0, 5).map(row => `<tr>${columns.map(column => `<td>${escapeHtml(row[column])}</td>`).join('')}</tr>`).join('');
+  const mappings = ingestionFields.map(([field,label,type,required]) => {
+    const suggested = suggestedColumn(field, columns);
+    return `<label><span>${label}${required ? ' *' : ''}</span><select data-canonical="${field}" data-type="${type}" ${required ? 'required' : ''}><option value="">${required ? 'Chọn cột' : 'Không nhập'}</option>${columns.map(column => `<option value="${escapeHtml(column)}" ${column === suggested ? 'selected' : ''}>${escapeHtml(column)}</option>`).join('')}</select></label>`;
+  }).join('');
+  const content = `<div class="ingestion-steps"><b class="done">1 Tải lên</b><b class="done">2 Xem trước</b><b>3 Ánh xạ</b><b>4 Nhập</b></div>
+    <div class="preview-summary"><span><b>${preview.row_count}</b>dòng</span><span><b>${preview.column_count}</b>cột</span><span><b>${preview.formula_cells_ignored || 0}</b>công thức bỏ qua</span></div>
+    <div class="preview-table"><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>
+    <form class="mapping-form"><div class="mapping-heading"><div><h3>Ánh xạ cột</h3><p>Hai trường có dấu * là bắt buộc. Dữ liệu sai kiểu sẽ không bị tự động ép.</p></div></div><div class="mapping-grid">${mappings}</div><label class="partial-option"><input type="checkbox" name="allow_partial"> Nhập các dòng hợp lệ và giữ lại lỗi để kiểm tra</label><button type="button" class="dark-button" data-action="run-file-import">Kiểm tra & nhập dữ liệu</button></form>`;
+  document.querySelectorAll('.ingestion-preview').forEach(container => { container.innerHTML = content; });
+}
+
+function renderImportErrors(items) {
+  if (!items?.length) return '';
+  return `<div class="import-errors"><h3>Chi tiết lỗi</h3>${items.slice(0, 20).map(error => `<p><b>Dòng ${error.row_number}</b><span>${escapeHtml(error.field)} · ${escapeHtml(error.code)}</span><small>${escapeHtml(error.message)}</small></p>`).join('')}</div>`;
+}
+
+async function handleImportFile(file) {
+  if (!file) return;
+  setIngestionStatus(`Đang tải ${file.name} lên máy chủ...`);
+  document.querySelectorAll('.ingestion-preview').forEach(container => { container.innerHTML = ''; });
+  try {
+    const uploaded = await NexusAPI.uploadDataset(file);
+    activeImport = uploaded.data.job;
+    setIngestionStatus('Đã tải lên. Đang đọc cấu trúc và tạo bản xem trước...');
+    const previewed = await NexusAPI.previewImport(activeImport.id);
+    activeImport = previewed.data.job;
+    renderImportPreview(previewed.data);
+    setIngestionStatus(`Đã kiểm tra ${previewed.data.preview.row_count} dòng. Hãy xác nhận ánh xạ cột.`, 'success');
+  } catch (error) {
+    setIngestionStatus(error.message, 'error');
+    await loadImportHistory();
+  }
+}
+
+async function submitImport(trigger) {
+  if (!activeImport) return;
+  const form = trigger.closest('.mapping-form');
+  const fields = [...form.querySelectorAll('select[data-canonical]')].filter(select => select.value).map(select => ({ source_column: select.value, canonical_field: select.dataset.canonical, data_type: select.dataset.type }));
+  const requiredMissing = [...form.querySelectorAll('select[required]')].some(select => !select.value);
+  if (requiredMissing) return setIngestionStatus('Hãy ánh xạ đủ trường Thời gian và Doanh thu.', 'error');
+  trigger.disabled = true;
+  setIngestionStatus('Đang kiểm tra từng dòng và nhập dữ liệu...');
+  try {
+    const response = await NexusAPI.runImport(activeImport.id, { display_name: activeImport.original_filename.replace(/\.[^.]+$/, ''), allow_partial: form.querySelector('[name="allow_partial"]').checked, fields });
+    activeImport = response.data.job;
+    if (activeImport.status === 'COMPLETED') {
+      setIngestionStatus(`Hoàn tất: ${activeImport.valid_rows} dòng hợp lệ, ${activeImport.invalid_rows} dòng lỗi.`, 'success');
     } else {
-        fromDate = new Date(now.getFullYear(), now.getMonth() + monthOffsets[period], 1);
+      const errors = await NexusAPI.importErrors(activeImport.id);
+      setIngestionStatus(`Nhập thất bại: ${activeImport.invalid_rows} dòng không hợp lệ.`, 'error');
+      document.querySelectorAll('.ingestion-preview').forEach(container => { container.insertAdjacentHTML('beforeend', renderImportErrors(errors.data.items)); });
     }
-    const fromStr = fromDate.toISOString().split('T')[0];
-    activeFilters.dateFrom = fromStr;
-    activeFilters.dateTo   = toStr;
-    if (dateFromEl) dateFromEl.value = fromStr;
-    if (dateToEl)   dateToEl.value   = toStr;
+    await loadImportHistory();
+  } catch (error) {
+    setIngestionStatus(error.message, 'error');
+  } finally {
+    trigger.disabled = false;
+  }
 }
 
-/** Chạy lại toàn bộ dashboard với filteredData */
-function applyAllFilters() {
-    filteredData = getFilteredData();
-    updateFilterBadge();
-    if (filteredData.length === 0) {
-        showToast('Không có dữ liệu phù hợp với bộ lọc', 'info', 'ph-funnel');
-        return;
-    }
-    runAIAnalytics();
-    applyFilters();
-    showToast(`Đang hiển thị ${filteredData.length} / ${currentData.length} bản ghi`, 'success', 'ph-funnel-simple');
+async function loadImportHistory(force = false) {
+  const containers = document.querySelectorAll('.ingestion-history');
+  if (!containers.length) return;
+  if (!canManageIngestion()) {
+    containers.forEach(container => { container.innerHTML = blockedMarkup('Chỉ Owner hoặc Admin có thể xem lịch sử nhập dữ liệu.'); });
+    return;
+  }
+  containers.forEach(container => { container.innerHTML = skeletonMarkup(3); });
+  try {
+    const response = await resourceRequests.run('import-history', signal => NexusAPI.importJobs(queryFor('import-history'), {signal,force}));
+    const jobs = response.data || [];
+    const html = `<div class="history-heading"><h3>Lịch sử nhập</h3><small>${response.meta.pagination.total} lần nhập</small></div>${resourceToolbar('import-history')}${jobs.length ? `<div class="history-table"><table><thead><tr><th>Tệp</th><th>Ngày tải</th><th>Trạng thái</th><th>Hợp lệ / lỗi</th></tr></thead><tbody>${jobs.map(job => `<tr><td><b>${escapeHtml(job.original_filename)}</b><small>${escapeHtml(job.uploader_name || '')}</small></td><td>${new Date(job.created_at).toLocaleString('vi-VN')}</td><td><span class="job-status ${job.status.toLowerCase()}">${statusLabel(job.status)}</span></td><td>${job.valid_rows || 0} / ${job.invalid_rows || 0}</td></tr>`).join('')}</tbody></table></div>${pagerMarkup('import-history',response.meta.pagination)}` : emptyMarkup('Chưa có lần nhập dữ liệu nào.')}`;
+    containers.forEach(container => { container.innerHTML = html; });
+  } catch (error) {
+    if (error?.code !== 'STALE_REQUEST') containers.forEach(container => { container.innerHTML = errorMarkup(error,'import-history'); });
+  }
 }
 
-/** Populate region + category chips từ dữ liệu thực */
-function populateFilterChips() {
-    const regionCol = columns.find(c => /region|khu.?v[ựư]c|chi.?nh[aá]nh|branch|city|province/i.test(c));
-    const catCol    = columns.find(c => c.toLowerCase().includes('category'));
+async function loadWorkspaceMembers() {
+  const container = document.getElementById('workspace-members');
+  if (!container) return;
+  try {
+    const response = await NexusAPI.members();
+    container.innerHTML = `<table><thead><tr><th>THÀNH VIÊN</th><th>EMAIL</th><th>VAI TRÒ</th><th>THAM GIA</th></tr></thead><tbody>${response.data.map(member => `<tr><td><b>${member.full_name}</b></td><td>${member.email}</td><td><span class="status-pill">${member.role}</span></td><td>${new Date(member.joined_at).toLocaleDateString('vi-VN')}</td></tr>`).join('')}</tbody></table>`;
+  } catch (error) {
+    container.innerHTML = `<p class="loading-state">${error.status === 403 ? 'Bạn không có quyền quản lý thành viên.' : 'Không thể tải thành viên.'}</p>`;
+  }
+}
 
-    const regionContainer = document.getElementById('region-chips');
-    const regionGroup = document.getElementById('region-filter-group');
-    const regionSep   = document.getElementById('region-sep');
-    if (regionContainer && regionCol) {
-        const regions = [...new Set(currentData.map(r => r[regionCol]).filter(Boolean))].sort();
-        if (regions.length) {
-            regionGroup?.classList.remove('hidden');
-            regionSep?.classList.remove('hidden');
-            regionContainer.innerHTML =
-                `<button class="chip active" data-region="all">Tất cả</button>` +
-                regions.map(r => `<button class="chip" data-region="${r}">${r}</button>`).join('');
-        } else {
-            regionGroup?.classList.add('hidden');
-            regionSep?.classList.add('hidden');
-        }
+function formatCompactNumber(value) {
+  return new Intl.NumberFormat('vi-VN', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(value || 0));
+}
+
+function formatCurrency(value) {
+  return `₫${formatCompactNumber(value)}`;
+}
+
+function setText(selector, value) {
+  const element = document.querySelector(selector);
+  if (element) element.textContent = value;
+}
+
+function applyOverviewData(payload) {
+  const summary = payload.summary;
+  setText('#home-screen .hero-card h2', formatCurrency(summary.revenue));
+  setText('#home-screen .hero-card .trend', `${summary.revenue_change >= 0 ? '+' : ''}${summary.revenue_change}%`);
+  setText('#home-screen .metric-card:nth-child(1) h3', formatCompactNumber(summary.users));
+  setText('#home-screen .metric-card:nth-child(1) .metric-change', `${summary.users_change >= 0 ? '+' : ''}${summary.users_change}%`);
+  setText('#home-screen .metric-card:nth-child(2) h3', `${summary.conversion}%`);
+  setText('#home-screen .metric-card:nth-child(2) .metric-change', `${summary.conversion_change >= 0 ? '+' : ''}${summary.conversion_change}%`);
+  setText('.alert-nav b', summary.unread_alerts);
+
+  const webValues = [formatCurrency(summary.revenue), formatCompactNumber(summary.users), `${summary.conversion}%`, formatCompactNumber(summary.sessions)];
+  document.querySelectorAll('#overview-web-panel .web-kpi-grid article').forEach((card, index) => {
+    const heading = card.querySelector('h2');
+    if (heading) heading.textContent = webValues[index];
+  });
+  const webChanges = [summary.revenue_change, summary.users_change, summary.conversion_change, summary.sessions_change];
+  document.querySelectorAll('#overview-web-panel .web-kpi-grid article').forEach((card, index) => {
+    const change = card.querySelector('span');
+    if (change) change.textContent = `${webChanges[index] >= 0 ? '+' : ''}${webChanges[index]}%`;
+  });
+
+  const traffic = payload.traffic_sources;
+  setText('#home-screen .traffic-block .section-title h2', 'Doanh thu theo danh mục');
+  setText('#home-screen .traffic-block .section-title p', 'Dữ liệu đã nhập trong Workspace');
+  setText('#overview-web-panel .source-card .web-card-title h2', 'Doanh thu theo danh mục');
+  setText('#overview-web-panel .source-card .web-card-title p', 'Phân bổ theo dữ liệu đã nhập');
+  document.querySelectorAll('#home-screen .legend p').forEach((row, index) => {
+    row.hidden = !traffic[index];
+    if (!traffic[index]) return;
+    row.childNodes.forEach(node => { if (node.nodeType === Node.TEXT_NODE) node.textContent = traffic[index].name; });
+    const value = row.querySelector('b');
+    if (value) value.textContent = `${traffic[index].share}%`;
+  });
+  setText('#home-screen .donut strong', formatCompactNumber(summary.sessions));
+
+  const mobileAttention = document.querySelector('#home-screen .section-block');
+  if (mobileAttention) {
+    mobileAttention.querySelectorAll('.insight-card,.resource-state').forEach(item => item.remove());
+    const items = payload.attention || [];
+    if (!items.length) mobileAttention.insertAdjacentHTML('beforeend', emptyMarkup());
+    else mobileAttention.insertAdjacentHTML('beforeend', items.slice(0,3).map(item => `<button class="insight-card" data-action="detail" data-title="${escapeHtml(item.title)}" data-description="${escapeHtml(item.description)}"><span class="insight-icon ${item.severity === 'warning' ? 'warning' : 'positive'}"><i class="ph-fill ${item.severity === 'warning' ? 'ph-warning-circle' : 'ph-sparkle'}"></i></span><span class="insight-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.description)}</small></span><span>${escapeHtml(item.change_value || item.severity)}</span><i class="ph ph-caret-right"></i></button>`).join(''));
+  }
+
+  const attention = document.querySelector('#overview-web-panel .attention-card');
+  if (attention) {
+    attention.innerHTML = `<div class="web-card-title"><div><h2>Điểm cần chú ý</h2><p>Dữ liệu từ Workspace</p></div><button data-web-screen="insights">Xem tất cả</button></div>${(payload.attention || []).length ? payload.attention.slice(0,3).map(item => `<div class="web-insight ${item.severity === 'warning' ? 'warning-bg' : 'success-bg'}"><i class="ph-fill ph-sparkle"></i><div><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.description)}</small></div><strong>${escapeHtml(item.change_value || '')}</strong></div>`).join('') : emptyMarkup()}`;
+  }
+  const campaign = document.querySelector('#overview-web-panel .campaign-card');
+  if (campaign) campaign.innerHTML = `<div class="web-card-title"><div><h2>Chiến dịch hàng đầu</h2><p>Chưa có API campaign</p></div></div>${blockedMarkup('Backend chưa có mô hình chiến dịch; không hiển thị số liệu giả.')}`;
+
+  const values = (payload.trend || []).map(row => Number(row.value ?? row.revenue ?? 0));
+  const svg = document.querySelector('#overview-web-panel .web-line-chart svg');
+  if (svg && values.length) {
+    const max = Math.max(...values,1); const min = Math.min(...values,0); const span = Math.max(max-min,1);
+    const points = values.map((value,index) => `${values.length === 1 ? 350 : index/(values.length-1)*700} ${210-(value-min)/span*180}`);
+    const line = `M${points.join(' L')}`;
+    const paths = svg.querySelectorAll('path');
+    if (paths[0]) paths[0].setAttribute('d', `${line} L700 230 L0 230Z`);
+    if (paths[1]) paths[1].setAttribute('d', line);
+  }
+  const mobileSvg = document.querySelector('#home-screen .hero-chart');
+  if (mobileSvg && values.length) {
+    const max = Math.max(...values,1); const min = Math.min(...values,0); const span = Math.max(max-min,1);
+    const points = values.map((value,index) => `${values.length === 1 ? 160 : index/(values.length-1)*320} ${96-(value-min)/span*82}`);
+    const line = `M${points.join(' L')}`;
+    const paths = mobileSvg.querySelectorAll('path');
+    if (paths[0]) paths[0].setAttribute('d', `${line} L320 106 L0 106Z`);
+    if (paths[1]) paths[1].setAttribute('d', line);
+  }
+  document.querySelectorAll('#overview-web-panel .web-source-content p').forEach((row,index) => {
+    row.hidden = !traffic[index];
+    if (!traffic[index]) return;
+    row.childNodes.forEach(node => { if (node.nodeType === Node.TEXT_NODE) node.textContent = traffic[index].name; });
+    const value = row.querySelector('b'); if (value) value.textContent = `${traffic[index].share}%`;
+  });
+  setText('#overview-web-panel .web-donut b', formatCompactNumber(summary.sessions));
+  const sourceDetail = document.querySelector('#overview-web-panel .source-card [data-web-screen]');
+  if (sourceDetail) sourceDetail.dataset.webScreen = 'revenue-analysis';
+  document.querySelector('#overview-web-panel .revenue-card .web-card-title button')?.setAttribute('disabled','');
+}
+
+async function loadBackendData(days = 7, force = false) {
+  setText('#home-screen .hero-card h2', '—');
+  setText('#home-screen .metric-card:nth-child(1) h3', '—');
+  setText('#home-screen .metric-card:nth-child(2) h3', '—');
+  document.querySelector('#home-screen .section-block')?.querySelectorAll('.insight-card').forEach(item => item.remove());
+  const homeAttention = document.querySelector('#home-screen .section-block');
+  if (homeAttention && !homeAttention.querySelector('.resource-skeleton')) homeAttention.insertAdjacentHTML('beforeend', skeletonMarkup(2));
+  const campaign = document.querySelector('#overview-web-panel .campaign-card');
+  if (campaign) campaign.innerHTML = skeletonMarkup(2);
+  try {
+    const response = await resourceRequests.run('overview', signal => NexusAPI.bootstrap(days, {signal,force}));
+    const data = response.data;
+    applyOverviewData(data.overview.data || data.overview);
+    setText('#profile-screen .profile-hero h1', data.profile.full_name);
+    setText('#profile-screen .profile-hero p', `${data.profile.job_title} · ${data.profile.workspace}`);
+    setText('.web-user b', data.profile.full_name);
+    setText('.web-user small', data.profile.job_title);
+    document.documentElement.dataset.api = 'connected';
+    document.querySelectorAll('#home-screen .resource-skeleton').forEach(item => item.remove());
+  } catch (error) {
+    if (error?.code === 'STALE_REQUEST') return;
+    document.documentElement.dataset.api = 'offline';
+    document.querySelectorAll('#home-screen .resource-skeleton').forEach(item => item.remove());
+    const mobile = document.querySelector('#home-screen .screen-scroll');
+    const desktop = document.querySelector('#overview-web-panel');
+    if (mobile && !mobile.querySelector('.api-load-error')) mobile.insertAdjacentHTML('afterbegin', `<div class="api-load-error">${errorMarkup(error,'overview')}</div>`);
+    if (desktop && !desktop.querySelector('.api-load-error')) desktop.insertAdjacentHTML('afterbegin', `<div class="api-load-error">${errorMarkup(error,'overview')}</div>`);
+  }
+}
+
+async function handleBackendForm(button) {
+  const form = button.closest('.mobile-form');
+  if (!form) return false;
+  const values = [...form.querySelectorAll('input')].map(input => input.value.trim());
+  const status = form.querySelector('.form-status');
+  if (status) status.textContent = '';
+  try {
+    if (currentPage === 'login') {
+      await NexusAPI.login({ email: values[0], password: values[1], redirect_to: '/' });
+      authSession = (await NexusAPI.session()).data;
+      document.body.classList.remove('auth-required');
+      showScreen('home');
+      await loadBackendData();
+      return true;
+    }
+    if (currentPage === 'register') {
+      await NexusAPI.register({ full_name: values[0], email: values[1], workspace_name: values[2], password: values[3] });
+      authSession = (await NexusAPI.session()).data;
+      document.body.classList.remove('auth-required');
+      showScreen('home');
+      await loadBackendData();
+      return true;
+    }
+    if (currentPage === 'forgot-password') {
+      await NexusAPI.forgotPassword({ email: values[0] });
+      if (status) status.textContent = 'Nếu tài khoản tồn tại, hướng dẫn đặt lại mật khẩu đã được chuẩn bị.';
+      return true;
+    }
+    if (currentPage === 'reset-password') {
+      const token = new URLSearchParams(location.search).get('reset_token') || '';
+      await NexusAPI.resetPassword({ token, password: values[0] });
+      if (status) status.textContent = 'Đã đặt lại mật khẩu. Hãy đăng nhập lại.';
+      setTimeout(() => openPage('login'), 700);
+      return true;
+    }
+    if (currentPage === 'create-report') {
+      await NexusAPI.createReport({ name: values[0] || 'Báo cáo chưa đặt tên', report_type: values[2] || 'custom' });
+      button.textContent = 'Đã tạo bản nháp';
+      setTimeout(() => openPage('reports'), 400);
+      return true;
+    }
+    if (currentPage === 'edit-profile') {
+      await NexusAPI.updateProfile({ full_name: values[0] || 'Trương Anh', job_title: values[1] || 'Data Analyst', email: values[2] || 'truong@nexus.vn', phone: values[3] || '', workspace: 'Nexus Team' });
+      button.textContent = 'Đã lưu thay đổi';
+      await loadBackendData();
+      return true;
+    }
+  } catch (error) {
+    if (status) status.textContent = error.message;
+    else button.textContent = 'Không thể lưu — thử lại';
+    return true;
+  }
+  return false;
+}
+
+document.addEventListener('click', event => {
+  const webPeriod = event.target.closest('#overview-web-panel .web-period button');
+  if (webPeriod && !webPeriod.disabled) {
+    const label = webPeriod.textContent.trim();
+    if (label.includes('Tùy chỉnh')) return;
+    document.querySelectorAll('#overview-web-panel .web-period button').forEach(button => button.classList.toggle('active',button === webPeriod));
+    loadBackendData(label.includes('Hôm nay') ? 1 : label.includes('30') ? 30 : 7);
+    return;
+  }
+  const importAction = event.target.closest('[data-action="choose-import-file"]');
+  if (importAction) {
+    event.preventDefault();
+    const workspace = importAction.closest('.ingestion-workspace') || document.querySelector('.ingestion-workspace');
+    workspace?.querySelector('.ingestion-file-input')?.click();
+    return;
+  }
+  const runImportAction = event.target.closest('[data-action="run-file-import"]');
+  if (runImportAction) {
+    event.preventDefault();
+    submitImport(runImportAction);
+    return;
+  }
+  const backendButton = event.target.closest('.mobile-form .primary-button');
+  if (backendButton && ['login','register','forgot-password','reset-password','create-report','edit-profile'].includes(currentPage)) {
+    event.preventDefault();
+    handleBackendForm(backendButton);
+    return;
+  }
+  const retry = event.target.closest('[data-resource-retry]');
+  if (retry) {
+    event.preventDefault();
+    reloadResource(retry.dataset.resourceRetry, true);
+    return;
+  }
+  const pager = event.target.closest('[data-resource-page]');
+  if (pager && !pager.disabled) {
+    event.preventDefault();
+    const key = pager.dataset.resourcePage;
+    queryFor(key).page = Number(pager.dataset.page);
+    reloadResource(key);
+    return;
+  }
+  const markRead = event.target.closest('[data-alert-read]');
+  if (markRead) {
+    event.preventDefault();
+    markRead.disabled = true;
+    NexusAPI.markAlertRead(Number(markRead.dataset.alertRead)).then(() => loadMobileAlerts(true)).catch(error => { markRead.disabled = false; markRead.textContent = error.message; });
+    return;
+  }
+  const webTrigger = event.target.closest('[data-web-screen]');
+  if (webTrigger) return showWebScreen(webTrigger.dataset.webScreen);
+  const route = event.target.closest('[data-route]');
+  if (route) return openPage(route.dataset.route);
+  const page = event.target.closest('[data-page]');
+  if (page) return openPage(page.dataset.page);
+  const nav = event.target.closest('[data-screen]');
+  if (nav) return showScreen(nav.dataset.screen);
+  const trigger = event.target.closest('[data-action]');
+  if (!trigger) return;
+  const action = trigger.dataset.action;
+  if (action === 'apply-analytics-filter') {
+    const box = trigger.closest('.filter-form');
+    const days = box.querySelector('[data-analytics-days]').value;
+    const from = box.querySelector('[data-analytics-date-from]').value;
+    const to = box.querySelector('[data-analytics-date-to]').value;
+    const status = box.querySelector('[role="status"]');
+    const query = queryFor('mobile-analytics');
+    if (days === 'custom') {
+      if (!from || !to || from > to) { status.textContent = 'Hãy chọn khoảng ngày hợp lệ.'; return; }
+      query.date_from = from; query.date_to = to; delete query.days;
     } else {
-        regionGroup?.classList.add('hidden');
-        regionSep?.classList.add('hidden');
+      query.days = Number(days); delete query.date_from; delete query.date_to;
     }
-
-    const catContainer = document.getElementById('category-chips');
-    const catGroup = document.getElementById('cat-filter-group');
-    const catSep   = document.getElementById('cat-sep');
-    if (catContainer && catCol) {
-        const cats = [...new Set(currentData.map(r => r[catCol]).filter(Boolean))].sort();
-        if (cats.length) {
-            catGroup?.classList.remove('hidden');
-            catSep?.classList.remove('hidden');
-            catContainer.innerHTML =
-                `<button class="chip active" data-cat="all">Tất cả</button>` +
-                cats.map(c => `<button class="chip" data-cat="${c}">${c}</button>`).join('');
-        } else {
-            catGroup?.classList.add('hidden');
-            catSep?.classList.add('hidden');
-        }
-    } else {
-        catGroup?.classList.add('hidden');
-        catSep?.classList.add('hidden');
-    }
-}
-
-/** Cập nhật badge số bộ lọc đang active */
-function updateFilterBadge() {
-    let count = 0;
-    if (activeFilters.dateFrom || activeFilters.dateTo) count++;
-    if (activeFilters.region !== 'all') count++;
-    if (activeFilters.category !== 'all') count++;
-
-    const badge   = document.getElementById('filter-active-count');
-    const numEl   = document.getElementById('filter-count-num');
-    const resetBtn = document.getElementById('btn-reset-filters');
-
-    if (count > 0) {
-        badge?.classList.remove('hidden');
-        resetBtn?.classList.remove('hidden');
-        if (numEl) numEl.textContent = count;
-    } else {
-        badge?.classList.add('hidden');
-        resetBtn?.classList.add('hidden');
-    }
-}
-
-/** Đặt lại tất cả bộ lọc về mặc định */
-function resetAllFilters(reRender = true) {
-    activeFilters = { period: 'all', dateFrom: '', dateTo: '', region: 'all', category: 'all' };
-    // Reset period chips
-    document.querySelectorAll('#period-chips .chip').forEach(c => c.classList.remove('active'));
-    document.querySelector('#period-chips [data-period="all"]')?.classList.add('active');
-    // Reset date inputs
-    const df = document.getElementById('filter-date-from');
-    const dt = document.getElementById('filter-date-to');
-    if (df) df.value = '';
-    if (dt) dt.value = '';
-    // Reset region chips
-    document.querySelectorAll('#region-chips .chip').forEach(c => c.classList.remove('active'));
-    document.querySelector('#region-chips [data-region="all"]')?.classList.add('active');
-    // Reset category chips
-    document.querySelectorAll('#category-chips .chip').forEach(c => c.classList.remove('active'));
-    document.querySelector('#category-chips [data-cat="all"]')?.classList.add('active');
-    updateFilterBadge();
-    if (reRender && currentData.length) {
-        filteredData = [...currentData];
-        runAIAnalytics();
-        applyFilters();
-        showToast('Đã xóa tất cả bộ lọc', 'info', 'ph-funnel-x');
-    }
-}
-
-function populateCategoryFilter() {
-    const categoryCol = columns.find(c => c.toLowerCase().includes('category'));
-    if (!categoryCol) return;
-    const categories = [...new Set(currentData.map(r => r[categoryCol]))].filter(Boolean);
-    const filter = document.getElementById('category-filter');
-    if (filter) filter.innerHTML = '<option value="all">Tất cả danh mục</option>' + categories.map(c => `<option value="${c}">${c}</option>`).join('');
-}
-
-function generateAIInsights(monthlySales, segments, _sentiment) {
-    if (!monthlySales || monthlySales.length === 0) return;
-
-    const kf = document.getElementById('kpi-forecast');
-    const kr = document.getElementById('kpi-revenue');
-    const kv = document.getElementById('kpi-vips');
-
-    const currentMonthRevenue = monthlySales[monthlySales.length - 1].total;
-    const forecastedRevenue = calculateForecast(monthlySales);
-
-    if(kf) kf.textContent = Math.round(forecastedRevenue).toLocaleString('vi-VN') + ' đ';
-    if(kr) kr.textContent = Math.round(currentMonthRevenue).toLocaleString('vi-VN') + ' đ';
-    if(kv) kv.textContent = segments['VIP'] || 0;
-
-    // Sentiment KH chi tiết
-    const sentimentData = analyzeSentimentDeep(monthlySales);
-    renderSentimentPanel(sentimentData);
-
-    // Update Activity KPIs (Syncing both tabs)
-    updateActivityKPIs(currentMonthRevenue, forecastedRevenue, segments);
-}
-
-function updateActivityKPIs(rev, fore, segments) {
-    const activityTab = document.getElementById('tab-activity');
-    if (!activityTab) return;
-
-    // Number of Emails (simulated based on transaction count)
-    const emailValue = activityTab.querySelector('.kpi-card:nth-child(1) .value');
-    if (emailValue) emailValue.textContent = currentData.length * 5;
-
-    // Number of Calls
-    const callValue = activityTab.querySelector('.kpi-card:nth-child(2) .value');
-    if (callValue) callValue.textContent = currentData.length * 3;
-
-    // Number of Meetings
-    const meetValue = activityTab.querySelector('.kpi-card:nth-child(3) .value');
-    if (meetValue) meetValue.textContent = Math.round(currentData.length * 1.2);
-
-    // Response Rate (Simulated based on sentiment/rating)
-    const respValue = activityTab.querySelector('.kpi-card:nth-child(4) .value');
-    if (respValue) respValue.textContent = "88%";
-
-    // Conversion
-    const convValue = activityTab.querySelector('.kpi-card:nth-child(5) .value');
-    if (convValue) convValue.textContent = "32";
-
-    // Success Rate
-    const succValue = activityTab.querySelector('.kpi-card:nth-child(6) .value');
-    if (succValue) succValue.textContent = "65%";
-}
-
-function updateForecastChart(history, forecast) {
-    const ctx = document.getElementById('forecastChart');
-    if (!ctx) return;
-    if (!window.Chart) {
-        console.warn('Chart.js is not loaded; skipping forecast chart.');
-        return;
-    }
-    if (forecastChart) forecastChart.destroy();
-    forecastChart = new Chart(ctx, {
-        type: 'line',
-        data: { labels: history.map(h => h.month), datasets: [{ label: 'Doanh thu', data: history.map(h => h.total), borderColor: '#6366f1' }] },
-        options: { responsive: true, maintainAspectRatio: false }
-    });
-}
-
-function updateSegmentChart(segments) {
-    const ctx = document.getElementById('segmentChart');
-    if (!ctx) return;
-    if (!window.Chart) {
-        console.warn('Chart.js is not loaded; skipping segment chart.');
-        return;
-    }
-    if (segmentChart) segmentChart.destroy();
-    segmentChart = new Chart(ctx, {
-        type: 'doughnut',
-        data: { labels: Object.keys(segments), datasets: [{ data: Object.values(segments), backgroundColor: ['#6366f1', '#06b6d4', '#3b82f6', '#8b5cf6'] }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '70%' }
-    });
-}
-
-function applyFilters() {
-    tablePage = 1;
-    applyTableView();
-}
-
-/** Apply search + category filter on top of filteredData, then render */
-function applyTableView() {
-    const q = document.getElementById('table-search')?.value.trim().toLowerCase() || '';
-    const cat = document.getElementById('category-filter')?.value || 'all';
-    const catCol = columns.find(c => c.toLowerCase().includes('category'));
-    let d = filteredData;
-    if (cat !== 'all' && catCol) d = d.filter(r => r[catCol] === cat);
-    if (q) d = d.filter(r => columns.some(c => String(r[c] ?? '').toLowerCase().includes(q)));
-    renderTable(d);
-}
-
-function renderTable(data) {
-    const header = document.getElementById('table-header');
-    const body   = document.getElementById('table-body');
-    if (!header || !body || !columns?.length) return;
-
-    const statusCol = columns.find(c => /^status$|tr[aạ]ng.?th[aá]i/i.test(c));
-    const addVirtual = !statusCol;
-
-    // Header
-    header.innerHTML = columns.map(c => `<th>${c}</th>`).join('') +
-        (addVirtual ? '<th>Trạng thái</th>' : '');
-
-    // Pagination
-    const total = data.length;
-    const totalPages = Math.max(1, Math.ceil(total / TABLE_PAGE_SIZE));
-    tablePage = Math.min(tablePage, totalPages);
-    const start = (tablePage - 1) * TABLE_PAGE_SIZE;
-    const pageData = data.slice(start, start + TABLE_PAGE_SIZE);
-
-    // Rows
-    body.innerHTML = pageData.map(row => {
-        const cells = columns.map(col => {
-            const val = row[col] ?? '';
-            if (col === statusCol) {
-                const s = getStatusInfo(String(val));
-                return `<td><span class="status-badge ${s.cls}">${s.label}</span></td>`;
-            }
-            return `<td>${val}</td>`;
-        }).join('');
-        const vs = addVirtual ? (() => { const s = getRowStatus(row); return `<td><span class="status-badge ${s.cls}">${s.label}</span></td>`; })() : '';
-        return `<tr>${cells}${vs}</tr>`;
-    }).join('');
-
-    // Footer info
-    const infoEl = document.getElementById('table-info');
-    if (infoEl) {
-        if (total === 0) {
-            infoEl.innerHTML = '<em>Không có dữ liệu</em>';
-        } else {
-            const end = Math.min(start + TABLE_PAGE_SIZE, total);
-            infoEl.innerHTML = `Hiển thị <strong>${start + 1}–${end}</strong> / <strong>${total}</strong> đơn hàng`;
-        }
-    }
-    renderPagination(totalPages);
-}
-
-function getRowStatus(row) {
-    const rCol = columns.find(c => /rating|review|score|star/i.test(c));
-    if (rCol) {
-        const r = parseFloat(row[rCol]) || 0;
-        if (r >= 4) return { label: 'Hoàn thành', cls: 'completed' };
-        if (r === 3) return { label: 'Đang xử lý', cls: 'processing' };
-        return { label: 'Đã hủy', cls: 'cancelled' };
-    }
-    const seed = String(row[columns[0]] || '').charCodeAt(0) % 3;
-    return [{ label: 'Hoàn thành', cls: 'completed' }, { label: 'Đang xử lý', cls: 'processing' }, { label: 'Đã hủy', cls: 'cancelled' }][seed];
-}
-
-function getStatusInfo(val) {
-    if (/hoàn.?thành|complete|done|delivered|success/i.test(val)) return { label: 'Hoàn thành', cls: 'completed' };
-    if (/xử.?lý|processing|pending|in.?progress/i.test(val))   return { label: 'Đang xử lý', cls: 'processing' };
-    if (/hủy|cancel|reject|failed/i.test(val))                  return { label: 'Đã hủy', cls: 'cancelled' };
-    return { label: val, cls: 'processing' };
-}
-
-function renderPagination(totalPages) {
-    const el = document.getElementById('table-pagination');
-    if (!el) return;
-    if (totalPages <= 1) { el.innerHTML = ''; return; }
-
-    const range = getPaginationRange(tablePage, totalPages);
-    const prev = `<button class="page-btn" data-page="${tablePage - 1}" ${tablePage === 1 ? 'disabled' : ''}><i class="ph ph-caret-left"></i></button>`;
-    const next = `<button class="page-btn" data-page="${tablePage + 1}" ${tablePage === totalPages ? 'disabled' : ''}><i class="ph ph-caret-right"></i></button>`;
-    const mid  = range.map(p => p === '...'
-        ? `<span class="page-ellipsis">…</span>`
-        : `<button class="page-btn${p === tablePage ? ' active' : ''}" data-page="${p}">${p}</button>`
-    ).join('');
-    el.innerHTML = prev + mid + next;
-}
-
-function getPaginationRange(cur, total) {
-    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-    if (cur <= 4)         return [1,2,3,4,5,'...',total];
-    if (cur >= total - 3) return [1,'...',total-4,total-3,total-2,total-1,total];
-    return [1,'...',cur-1,cur,cur+1,'...',total];
-}
-
-function exportTableCSV() {
-    if (!filteredData.length) return showToast('Không có dữ liệu', 'info', 'ph-warning');
-    const statusCol = columns.find(c => /^status$|tr[aạ]ng.?th[aá]i/i.test(c));
-    const hdrs = statusCol ? columns : [...columns, 'Trạng thái'];
-    const rows = [hdrs.join(',')];
-    filteredData.forEach(row => {
-        const vals = columns.map(c => `"${String(row[c] ?? '').replace(/"/g, '""')}"`);
-        if (!statusCol) vals.push(`"${getRowStatus(row).label}"`);
-        rows.push(vals.join(','));
-    });
-    const blob = new Blob(['\uFEFF' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `orders_${new Date().toISOString().slice(0,10)}.csv` });
-    a.click(); URL.revokeObjectURL(a.href);
-    showToast('Xuất CSV thành công!', 'success', 'ph-file-csv');
-}
-
-function exportTableExcel() {
-    if (!filteredData.length) return showToast('Không có dữ liệu', 'info', 'ph-warning');
-    if (typeof XLSX === 'undefined') return showToast('Thư viện XLSX chưa tải', 'info', 'ph-spinner');
-    const statusCol = columns.find(c => /^status$|tr[aạ]ng.?th[aá]i/i.test(c));
-    const hdrs = statusCol ? columns : [...columns, 'Trạng thái'];
-    const wsData = [hdrs, ...filteredData.map(row => {
-        const vals = columns.map(c => row[c] ?? '');
-        if (!statusCol) vals.push(getRowStatus(row).label);
-        return vals;
-    })];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsData), 'Orders');
-    XLSX.writeFile(wb, `orders_${new Date().toISOString().slice(0,10)}.xlsx`);
-    showToast('Xuất Excel thành công!', 'success', 'ph-file-xls');
-}
-
-function loadDemoData() {
-    fetch('sales_data.csv').then(res => res.text()).then(text => {
-        Papa.parse(text, { header: true, dynamicTyping: true, complete: function(r) { currentData = r.data; columns = r.meta.fields; initDashboard(); } });
-    });
-}
-
-function showToast(m, t, i) {
-    const container = document.getElementById('toast-container');
-    if (!container) return;
-    const toast = document.createElement('div');
-    toast.className = `toast ${t}`;
-    toast.innerHTML = `<i class="ph ${i}"></i> <span>${m}</span>`;
-    container.appendChild(toast);
-    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 400); }, 3000);
-
-    // Đồng bộ với notification panel
-    addNotification(m, t, i);
-}
-
-function addNotification(m, t, i) {
-    notifications.unshift({ message: m, type: t, icon: i, time: new Date() });
-    if (notifications.length > 20) notifications.pop();
-    renderNotifications();
-}
-
-function renderNotifications() {
-    const list = document.getElementById('notif-list');
-    const badge = document.querySelector('.notif-badge');
-    const panel = document.getElementById('notif-panel');
-    if (!list) return;
-
-    if (notifications.length === 0) {
-        list.innerHTML = '<div class="notif-empty">Không có thông báo mới</div>';
-        if (badge) badge.classList.add('hidden');
-        return;
-    }
-
-    // Cập nhật số lượng thông báo chưa đọc
-    if (badge && panel && panel.classList.contains('hidden')) {
-        badge.textContent = notifications.length > 9 ? '9+' : notifications.length;
-        badge.classList.remove('hidden');
-    }
-
-    list.innerHTML = notifications.map(n => `
-        <div class="notif-item ${n.type === 'error' ? 'important' : ''}">
-            <div style="display: flex; gap: 8px; align-items: start;">
-                <div style="font-size: 1.2rem; color: ${n.type === 'error' ? '#ef4444' : n.type === 'success' ? '#10b981' : '#6366f1'}">
-                    <i class="ph ${n.icon}"></i>
-                </div>
-                <div>
-                    <div style="margin-bottom: 4px;">${n.message}</div>
-                    <div style="font-size: 0.75rem; color: #94a3b8;">${n.time.toLocaleTimeString('vi-VN')}</div>
-                </div>
-            </div>
-        </div>
-    `).join('');
-}
-
-function addToHistory(f) { console.log("Added to history:", f); }
-
-function renderClusterChartDeepDefault(s) {
-    const canvas = document.getElementById('segmentChartDeep');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (deepSegmentChart) deepSegmentChart.destroy();
-    deepSegmentChart = new Chart(ctx, { type: 'polarArea', data: { labels: Object.keys(s), datasets: [{ data: Object.values(s), backgroundColor: ['#6366f1', '#06b6d4', '#3b82f6', '#8b5cf6'] }] }, options: { responsive: true, maintainAspectRatio: false } });
-}
-
-function renderActivityCharts() {
-    showToast('Đang đồng bộ dữ liệu hoạt động...', 'info', 'ph-arrows-clockwise');
-
-    // --- DYNAMIC LOGIC BASED ON CSV (uses filteredData) ---
-    const customerCounts = {};
-    filteredData.forEach(row => {
-        const id = row.CustomerID;
-        if (id) customerCounts[id] = (customerCounts[id] || 0) + 1;
-    });
-
-    let recurring = 0;
-    let newCust = 0;
-    Object.values(customerCounts).forEach(count => {
-        if (count > 1) recurring++;
-        else newCust++;
-    });
-
-    const dayOfWeekData = [0, 0, 0, 0, 0, 0, 0]; // Sun-Sat
-    filteredData.forEach(row => {
-        const date = new Date(row.OrderDate);
-        if (!isNaN(date.getTime())) {
-            dayOfWeekData[date.getDay()]++;
-        }
-    });
-    // Shift so Mon is first: [Mon, Tue, Wed, Thu, Fri, Sat, Sun]
-    const shiftedDays = [...dayOfWeekData.slice(1), dayOfWeekData[0]];
-
-    // --- CHART INITIALIZATION ---
-
-    // 1. Lead Source Analysis (Pie) - Premium Colors
-    const lsCtx = document.getElementById('leadSourceChart').getContext('2d');
-    if (leadSourceChart) leadSourceChart.destroy();
-    leadSourceChart = new Chart(lsCtx, {
-        type: 'pie',
-        data: {
-            labels: ['Google Ads', 'Direct', 'Social Media', 'Referral', 'Email'],
-            datasets: [{
-                data: [40, 20, 25, 10, 5],
-                backgroundColor: ['#06b6d4', '#6366f1', '#f59e0b', '#10b981', '#ef4444'],
-                borderWidth: 2,
-                borderColor: '#0f1117'
-            }]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            plugins: { 
-                legend: { position: 'bottom', labels: { color: '#94a3b8', font: { family: 'Outfit' }, usePointStyle: true } },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.label || '';
-                            if (label) label += ': ';
-                            if (context.parsed !== null) {
-                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                const percentage = Math.round((context.parsed / total) * 100) + '%';
-                                label += context.parsed + ' (' + percentage + ')';
-                            }
-                            return label;
-                        }
-                    }
-                }
-            } 
-        }
-    });
-
-    // 2. Emails Sent per Day (Bar) - Matching Cyan
-    const edCtx = document.getElementById('emailsDayChart').getContext('2d');
-    if (emailsDayChart) emailsDayChart.destroy();
-    emailsDayChart = new Chart(edCtx, {
-        type: 'bar',
-        data: {
-            labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-            datasets: [{
-                label: 'Emails',
-                data: shiftedDays.map(v => v * 12 + 5), // Simulated based on order volume
-                backgroundColor: '#06b6d4',
-                borderRadius: 8,
-                hoverBackgroundColor: '#22d3ee'
-            }]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            scales: { 
-                y: { display: false }, 
-                x: { grid: { display: false }, ticks: { color: '#94a3b8' } } 
-            },
-            plugins: { legend: { display: false } }
-        }
-    });
-
-    // 3. Follow-up Sessions (Horizontal Bar)
-    const fsCtx = document.getElementById('followUpChart').getContext('2d');
-    if (followUpChart) followUpChart.destroy();
-    followUpChart = new Chart(fsCtx, {
-        type: 'bar',
-        data: {
-            labels: ['Intro', 'Demo', 'Proposal', 'Closing'],
-            datasets: [{
-                label: 'Sessions',
-                data: [recurring * 5, recurring * 3, recurring * 2, recurring],
-                backgroundColor: '#6366f1',
-                borderRadius: 8
-            }]
-        },
-        options: { 
-            indexAxis: 'y', 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            scales: { 
-                x: { display: false }, 
-                y: { grid: { display: false }, ticks: { color: '#94a3b8' } } 
-            },
-            plugins: { legend: { display: false } }
-        }
-    });
-
-    // 4. New vs Recurring Stats (Doughnut) - Dynamic
-    const ssCtx = document.getElementById('salesStatsChart').getContext('2d');
-    if (salesStatsChart) salesStatsChart.destroy();
-    salesStatsChart = new Chart(ssCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['New Customers', 'Recurring'],
-            datasets: [{
-                data: [newCust, recurring],
-                backgroundColor: ['#06b6d4', '#f59e0b'],
-                borderWidth: 0,
-                hoverOffset: 10
-            }]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            cutout: '75%', 
-            plugins: { 
-                legend: { position: 'bottom', labels: { color: '#94a3b8', usePointStyle: true } } 
-            } 
-        }
-    });
-
-    // 5. Calls per Day (Bar) - Matching Orange
-    const cdCtx = document.getElementById('callsDayChart').getContext('2d');
-    if (callsDayChart) callsDayChart.destroy();
-    callsDayChart = new Chart(cdCtx, {
-        type: 'bar',
-        data: {
-            labels: ['M', 'T', 'W', 'T', 'F', 'S', 'S'],
-            datasets: [{
-                label: 'Calls',
-                data: shiftedDays.map(v => v * 8 + 3),
-                backgroundColor: '#f59e0b',
-                borderRadius: 8
-            }]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            scales: { 
-                y: { display: false }, 
-                x: { grid: { display: false }, ticks: { color: '#94a3b8' } } 
-            },
-            plugins: { legend: { display: false } }
-        }
-    });
-
-    // 6. Response Time (Area Line) - Gradient
-    const rtCtx = document.getElementById('responseTimeChart').getContext('2d');
-    if (responseTimeChart) responseTimeChart.destroy();
-    
-    const gradient = rtCtx.createLinearGradient(0, 0, 0, 300);
-    gradient.addColorStop(0, 'rgba(6, 182, 212, 0.3)');
-    gradient.addColorStop(1, 'rgba(6, 182, 212, 0)');
-
-    responseTimeChart = new Chart(rtCtx, {
-        type: 'line',
-        data: {
-            labels: ['1h', '2h', '3h', '4h', '5h', '6h', '7h'],
-            datasets: [{
-                label: 'Avg Response (min)',
-                data: [15, 22, 18, 30, 25, 35, 28],
-                borderColor: '#06b6d4',
-                backgroundColor: gradient,
-                fill: true,
-                tension: 0.4,
-                pointRadius: 4,
-                pointBackgroundColor: '#06b6d4'
-            }]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false, 
-            scales: { 
-                y: { display: false }, 
-                x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } } 
-            },
-            plugins: { legend: { display: false } }
-        }
-    });
-
-    // 7. Staff Performance (Radar/Bar) - Dummy data for empty state
-    let spCtx = document.getElementById('staffPerformanceChart');
-    if (spCtx) {
-        if (window.staffPerformanceChartObj) window.staffPerformanceChartObj.destroy();
-        window.staffPerformanceChartObj = new Chart(spCtx.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: ['Alice', 'Bob', 'Charlie', 'David'],
-                datasets: [
-                    { label: 'Cuộc gọi', data: [45, 30, 60, 25], backgroundColor: '#6366f1' },
-                    { label: 'Email', data: [80, 50, 90, 40], backgroundColor: '#06b6d4' },
-                    { label: 'Gặp mặt', data: [15, 10, 20, 5], backgroundColor: '#f59e0b' }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { stacked: true, grid: { display: false }, ticks: { color: '#94a3b8' } },
-                    y: { stacked: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#94a3b8' } }
-                },
-                plugins: {
-                    legend: { position: 'bottom', labels: { color: '#94a3b8', usePointStyle: true, boxWidth: 8 } }
-                }
-            }
-        });
-    }
-
-    // 8. Audit Log Dummy Data
-    const auditLog = document.getElementById('audit-log');
-    if (auditLog) {
-        auditLog.innerHTML = `
-            <div style="display:flex; gap:12px; margin-bottom:12px; align-items:flex-start;">
-                <div style="width:32px; height:32px; border-radius:50%; background:rgba(16,185,129,0.1); color:#10b981; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i class="ph-fill ph-check-circle"></i></div>
-                <div>
-                    <p style="margin:0; font-size:0.9rem; color:#e2e8f0;"><strong>Admin</strong> đã tải lên dữ liệu sales_data.csv</p>
-                    <span style="font-size:0.75rem; color:#94a3b8;">Vừa xong</span>
-                </div>
-            </div>
-            <div style="display:flex; gap:12px; margin-bottom:12px; align-items:flex-start;">
-                <div style="width:32px; height:32px; border-radius:50%; background:rgba(99,102,241,0.1); color:#6366f1; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i class="ph-fill ph-robot"></i></div>
-                <div>
-                    <p style="margin:0; font-size:0.9rem; color:#e2e8f0;"><strong>AI Forecast</strong> hoàn tất phân tích dự báo</p>
-                    <span style="font-size:0.75rem; color:#94a3b8;">2 phút trước</span>
-                </div>
-            </div>
-            <div style="display:flex; gap:12px; margin-bottom:12px; align-items:flex-start;">
-                <div style="width:32px; height:32px; border-radius:50%; background:rgba(6,182,212,0.1); color:#06b6d4; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i class="ph-fill ph-envelope-simple"></i></div>
-                <div>
-                    <p style="margin:0; font-size:0.9rem; color:#e2e8f0;"><strong>Hệ thống</strong> gửi 125 email tự động</p>
-                    <span style="font-size:0.75rem; color:#94a3b8;">15 phút trước</span>
-                </div>
-            </div>
-            <div style="display:flex; gap:12px; margin-bottom:0; align-items:flex-start;">
-                <div style="width:32px; height:32px; border-radius:50%; background:rgba(245,158,11,0.1); color:#f59e0b; display:flex; align-items:center; justify-content:center; flex-shrink:0;"><i class="ph-fill ph-warning-circle"></i></div>
-                <div>
-                    <p style="margin:0; font-size:0.9rem; color:#e2e8f0;"><strong>Cảnh báo:</strong> Tỷ lệ phản hồi giảm 5%</p>
-                    <span style="font-size:0.75rem; color:#94a3b8;">1 giờ trước</span>
-                </div>
-            </div>
-        `;
-        auditLog.style.overflowY = 'auto';
-        auditLog.style.maxHeight = '260px';
-    }
-}
-
-function exportToPDF() { 
-    showToast('Đang tạo báo cáo PDF chuyên nghiệp...', 'info', 'ph-spinner');
-    const element = document.getElementById('dashboard');
-    const opt = {
-      margin:       0.2,
-      filename:     `DataInsight_Executive_Report_${new Date().toISOString().slice(0,10)}.pdf`,
-      image:        { type: 'jpeg', quality: 0.98 },
-      html2canvas:  { scale: 2, useCORS: true, logging: false, backgroundColor: '#0f1117' },
-      jsPDF:        { unit: 'in', format: 'a3', orientation: 'landscape' }
-    };
-    
-    html2pdf().set(opt).from(element).save().then(() => {
-        showToast('Đã tải xuống báo cáo PDF!', 'success', 'ph-check-circle');
-    });
-}
-
-// --- CONVERSATIONAL BI (CHAT VỚI DỮ LIỆU) ---
-document.addEventListener('DOMContentLoaded', () => {
-    const chatInput = document.getElementById('chat-input');
-    const btnSend = document.getElementById('btn-chat-send');
-    const chatBody = document.getElementById('chat-body');
-
-    function sendChatMessage() {
-        const text = chatInput.value.trim();
-        if (!text) return;
-
-        // Thêm tin nhắn của User
-        const userMsg = document.createElement('div');
-        userMsg.className = 'chat-message user';
-        userMsg.innerHTML = `<div class="msg-bubble">${text}</div>`;
-        chatBody.appendChild(userMsg);
-        chatInput.value = '';
-        chatBody.scrollTop = chatBody.scrollHeight;
-
-        // Loading indicator
-        const loadingMsg = document.createElement('div');
-        loadingMsg.className = 'chat-message ai';
-        loadingMsg.innerHTML = `<div class="msg-bubble"><span class="ph-spinner ph-spin" style="font-size: 1.2rem;"></span> Đang suy nghĩ...</div>`;
-        chatBody.appendChild(loadingMsg);
-        chatBody.scrollTop = chatBody.scrollHeight;
-
-        // Gọi API Gemini từ backend
-        fetch(`${AI_SERVICE_URL}/api/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text })
-        })
-        .then(res => res.json())
-        .then(data => {
-            chatBody.removeChild(loadingMsg);
-            const aiMsg = document.createElement('div');
-            aiMsg.className = 'chat-message ai';
-            aiMsg.innerHTML = `<div class="msg-bubble">${data.reply ? data.reply.replace(/\\n/g, '<br>') : 'Không có phản hồi.'}</div>`;
-            chatBody.appendChild(aiMsg);
-            chatBody.scrollTop = chatBody.scrollHeight;
-        })
-        .catch(err => {
-            chatBody.removeChild(loadingMsg);
-            const aiMsg = document.createElement('div');
-            aiMsg.className = 'chat-message ai';
-            
-            // Fallback mock nếu backend chưa mở hoặc lỗi
-            let responseText = "Xin lỗi, tôi chưa hiểu ý bạn.";
-            const lower = text.toLowerCase();
-            if (lower.includes('vùng') && lower.includes('thấp')) {
-                responseText = "Theo dữ liệu hiện tại, vùng <strong>Đà Nẵng</strong> đang có doanh thu thấp nhất trong kỳ.";
-            } else if (lower.includes('tăng trưởng') || lower.includes('dự báo')) {
-                responseText = "Thuật toán dự báo doanh thu tháng tới có thể đạt <strong>tăng trưởng 8.4%</strong>.";
-            } else {
-                responseText = `Lỗi kết nối AI Backend (${err.message}). Vui lòng khởi động backend để dùng Gemini.`;
-            }
-
-            aiMsg.innerHTML = `<div class="msg-bubble">${responseText}</div>`;
-            chatBody.appendChild(aiMsg);
-            chatBody.scrollTop = chatBody.scrollHeight;
-        });
-    }
-
-    if (btnSend) btnSend.addEventListener('click', sendChatMessage);
-    if (chatInput) chatInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') sendChatMessage();
-    });
-
-    // --- CUSTOMIZABLE LAYOUT (DRAG AND DROP) ---
-    // Make Grid Rows sortable
-    const sortableConfigs = {
-        animation: 150,
-        ghostClass: 'sortable-ghost',
-        handle: '.card-header, .kpi-meta, h3', // Kéo bằng header
-        easing: "cubic-bezier(1, 0, 0, 1)"
-    };
-
-    setTimeout(() => {
-        const visualRow = document.querySelector('.visual-row');
-        if (visualRow && typeof Sortable !== 'undefined') {
-            Sortable.create(visualRow, sortableConfigs);
-        }
-
-        const activityRows = document.querySelectorAll('.activity-row');
-        activityRows.forEach(row => {
-            if (typeof Sortable !== 'undefined') Sortable.create(row, sortableConfigs);
-        });
-        
-        const kpiGrid = document.querySelector('.kpi-grid');
-        if (kpiGrid && typeof Sortable !== 'undefined') {
-            Sortable.create(kpiGrid, sortableConfigs);
-        }
-    }, 1000); // Chờ DOM render xong biểu đồ
+    showScreen('analytics');
+    return;
+  }
+  if (action === 'logout') {
+    NexusAPI.logout().finally(() => { authSession = null; document.body.classList.add('auth-required'); openPage('login'); });
+  }
+  if (action === 'invite-member') {
+    const box = trigger.closest('.member-invite');
+    const email = box.querySelector('input').value.trim();
+    const role = box.querySelector('select').value;
+    const message = box.querySelector('[role="status"]');
+    NexusAPI.inviteMember({ email, role }).then(result => { message.textContent = `Đã tạo lời mời. Mã: ${result.data.invitation_token}`; }).catch(error => { message.textContent = error.message; });
+  }
+  if (action === 'focus-create-resource') document.querySelector('.web-create-form input')?.focus();
+  if (action === 'focus-member-invite') document.querySelector('.member-invite input')?.focus();
+  if (action === 'refresh-web-resource') loadWebResource(currentWebScreen, true);
+  if (action === 'detail') openDetail(trigger.dataset.title, trigger.dataset.description);
+  if (action === 'close') modal.classList.remove('open');
+  if (action === 'search') openPage('global-search');
+  if (action === 'close-search') searchOverlay.classList.remove('open');
+  if (action === 'back') goBack();
+  if (action === 'secondary-menu') openPage('ui-map');
+  if (['home', 'analytics', 'insights', 'alerts', 'profile'].includes(action)) showScreen(action);
 });
+
+document.addEventListener('submit', async event => {
+  const form = event.target.closest('[data-create-resource]');
+  if (!form) return;
+  event.preventDefault();
+  const message = form.querySelector('[role="status"]');
+  const button = form.querySelector('button[type="submit"]');
+  if (!['OWNER','ADMIN','ANALYST'].includes(authSession?.workspace?.role)) {
+    message.textContent = 'Vai trò Viewer chỉ có quyền xem.';
+    return;
+  }
+  button.disabled = true;
+  message.textContent = 'Đang lưu...';
+  try {
+    if (form.dataset.createResource === 'report') {
+      await NexusAPI.createReport({name: form.elements.name.value.trim(), report_type: form.elements.report_type.value});
+      form.reset(); await loadListResource('web-reports', true);
+    } else {
+      await NexusAPI.createAlert({title: form.elements.title.value.trim(), description: form.elements.description.value.trim(), severity: form.elements.severity.value});
+      form.reset(); await loadListResource('web-alerts', true);
+    }
+    message.textContent = 'Đã lưu thành công.';
+  } catch (error) { message.textContent = error.message; }
+  finally { button.disabled = false; }
+});
+
+document.addEventListener('change', event => {
+  if (event.target.matches('.ingestion-file-input')) {
+    handleImportFile(event.target.files?.[0]);
+    event.target.value = '';
+    return;
+  }
+  const controls = event.target.closest('[data-resource-controls]');
+  if (!controls) return;
+  const key = controls.dataset.resourceControls;
+  const query = queryFor(key);
+  if (event.target.matches('[data-resource-filter]')) {
+    ['status','severity','unread_only','is_favorite'].forEach(name => delete query[name]);
+    const [name,value] = event.target.value.split('=');
+    if (name && value) query[name] = value;
+  }
+  if (event.target.matches('[data-resource-sort]')) query.sort_order = event.target.value;
+  if (event.target.matches('[data-resource-days]')) {
+    query.days = Number(event.target.value); delete query.date_from; delete query.date_to;
+    controls.querySelectorAll('input[type="date"]').forEach(input => { input.value = ''; });
+  }
+  if (event.target.matches('[data-resource-date-from]')) query.date_from = event.target.value;
+  if (event.target.matches('[data-resource-date-to]')) query.date_to = event.target.value;
+  query.page = 1;
+  if ((query.date_from && !query.date_to) || (!query.date_from && query.date_to)) return;
+  reloadResource(key);
+});
+
+let resourceSearchTimer = null;
+document.addEventListener('input', event => {
+  if (event.target.matches('.web-search input')) {
+    queryFor('web-global-search').search = event.target.value.trim();
+    clearTimeout(resourceSearchTimer);
+    resourceSearchTimer = setTimeout(() => loadWebGlobalSearch(),250);
+    return;
+  }
+  const input = event.target.closest('[data-resource-search]');
+  if (!input) return;
+  const key = input.dataset.resourceSearch;
+  const query = queryFor(key);
+  query.search = input.value.trim();
+  query.page = 1;
+  clearTimeout(resourceSearchTimer);
+  resourceSearchTimer = setTimeout(() => reloadResource(key), 250);
+});
+
+document.querySelectorAll('[data-period]').forEach(button => button.addEventListener('click', () => {
+  if (button.dataset.period === 'Tùy chỉnh') return openPage('advanced-filter');
+  document.querySelectorAll('[data-period]').forEach(item => item.classList.remove('selected'));
+  button.classList.add('selected');
+  document.querySelector('.hero-card .muted').textContent = `so với ${button.dataset.period.toLowerCase()}`;
+  const selectedDays = button.dataset.period === 'Hôm nay' ? 1 : button.dataset.period === '30 ngày qua' ? 30 : 7;
+  loadBackendData(selectedDays);
+}));
+
+modal.addEventListener('click', event => { if (event.target === modal) modal.classList.remove('open'); });
+
+async function initializeAuth() {
+  try {
+    authSession = (await NexusAPI.session()).data;
+    document.body.classList.remove('auth-required');
+    const memberNav = document.querySelector('[data-web-screen="members"]');
+    if (memberNav) memberNav.hidden = !['OWNER','ADMIN'].includes(authSession.workspace.role);
+    document.querySelectorAll('.web-actions button').forEach(button => { button.disabled = true; button.title = 'Backend chưa hỗ trợ thao tác này'; });
+    const customPeriod = [...document.querySelectorAll('#overview-web-panel .web-period button')].find(button => button.textContent.includes('Tùy chỉnh'));
+    if (customPeriod) { customPeriod.disabled = true; customPeriod.title = 'Dùng bộ lọc ngày tại các màn phân tích'; }
+    await loadBackendData();
+  } catch (_error) {
+    authSession = null;
+    document.body.classList.add('auth-required');
+    openPage(new URLSearchParams(location.search).has('reset_token') ? 'reset-password' : 'login');
+  }
+}
+
+initializeAuth();

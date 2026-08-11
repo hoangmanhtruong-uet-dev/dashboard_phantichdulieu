@@ -1,610 +1,112 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="vi">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DataInsight AI | Sales Pro Dashboard</title>
-    <meta name="description" content="Dashboard bán hàng tích hợp AI: Dự báo doanh thu, phân khúc khách hàng và phân tích cảm xúc.">
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#f7f9fc" />
+  <title>Nexus Analytics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="frontend/resource-state.css" />
 </head>
-<body>
-    <!-- 1. LOGIN SCREEN (NEW) -->
-    <section id="login-screen" class="login-overlay">
-        <div class="login-card glass">
-            <div class="login-header">
-                <i class="ph-fill ph-shield-check"></i>
-                <h2>DataInsight Auth</h2>
-                <p>Hệ thống phân tích dữ liệu doanh nghiệp</p>
-            </div>
-            <div class="login-form">
-                <div class="input-group">
-                    <i class="ph ph-user"></i>
-                    <input type="text" id="username" placeholder="Tên đăng nhập">
-                </div>
-                <div class="input-group">
-                    <i class="ph ph-lock"></i>
-                    <input type="password" id="password" placeholder="Mật khẩu">
-                </div>
-                <button class="btn btn-primary btn-block" id="btn-login">Đăng nhập hệ thống</button>
-                <div class="login-footer">
-                    <a href="#" id="quick-login" style="display: block; margin-bottom: 1rem; color: var(--accent-primary);">Đăng nhập nhanh (Admin)</a>
-                    <a href="#">Quên mật khẩu?</a>
-                </div>
-            </div>
-        </div>
+<body class="auth-required">
+  <main class="mobile-shell" aria-label="Nexus Analytics mobile app">
+    <section class="screen active" id="home-screen">
+      <header class="app-header">
+        <div class="brand"><span class="brand-mark">N</span><span>Nexus Analytics</span></div>
+        <button class="icon-button" data-action="search" aria-label="Tìm kiếm"><i class="ph ph-magnifying-glass"></i></button>
+      </header>
+
+      <div class="page-heading">
+        <div><p class="eyebrow">11 THÁNG 8, 2026</p><h1>Tổng quan</h1></div>
+        <button class="avatar" data-action="profile" aria-label="Hồ sơ">TA</button>
+      </div>
+
+      <div class="period-switcher" role="group" aria-label="Khoảng thời gian">
+        <button data-period="Hôm nay">Hôm nay</button><button class="selected" data-period="7 ngày qua">7 ngày</button><button data-period="30 ngày qua">30 ngày</button><button data-period="Tùy chỉnh">•••</button>
+      </div>
+
+      <article class="hero-card tappable" data-page="revenue">
+        <div class="card-top"><div><p>TỔNG DOANH THU</p><h2>₫124,592</h2></div><span class="trend up"><i class="ph-bold ph-trend-up"></i> 12.5%</span></div>
+        <p class="muted">so với kỳ trước</p>
+        <svg class="hero-chart" viewBox="0 0 320 106" preserveAspectRatio="none" aria-label="Biểu đồ doanh thu">
+          <defs><linearGradient id="area" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#19b9af" stop-opacity=".28"/><stop offset="1" stop-color="#19b9af" stop-opacity="0"/></linearGradient></defs>
+          <path d="M0 91 L24 86 L48 83 L72 89 L96 70 L120 73 L145 54 L169 61 L193 45 L217 50 L241 32 L266 37 L290 18 L320 10 L320 106 L0 106Z" fill="url(#area)"/>
+          <path d="M0 91 L24 86 L48 83 L72 89 L96 70 L120 73 L145 54 L169 61 L193 45 L217 50 L241 32 L266 37 L290 18 L320 10" fill="none" stroke="#118b89" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="290" cy="18" r="4.5" fill="#fff" stroke="#118b89" stroke-width="3"/>
+        </svg>
+        <div class="chart-days"><span>T2</span><span>T3</span><span>T4</span><span>T5</span><span>T6</span><span>T7</span><span>CN</span></div>
+      </article>
+
+      <section class="metrics-grid">
+        <article class="metric-card tappable" data-page="users"><div class="metric-icon purple"><i class="ph-fill ph-users-three"></i></div><p>NGƯỜI DÙNG</p><h3>42,108</h3><span class="metric-change up">+8.2%</span></article>
+        <article class="metric-card tappable" data-page="conversion"><div class="metric-icon coral"><i class="ph-fill ph-chart-line-down"></i></div><p>TỶ LỆ CHUYỂN ĐỔI</p><h3>3.42%</h3><span class="metric-change down">−0.5%</span></article>
+      </section>
+
+      <section class="section-block">
+        <div class="section-title"><div><h2>Điểm cần chú ý hôm nay</h2><p>AI đã phát hiện 3 tín hiệu mới</p></div><button class="text-button" data-action="insights">Xem tất cả</button></div>
+        <button class="insight-card" data-action="detail" data-title="Chuyển đổi giảm mạnh" data-description="Tỷ lệ chuyển đổi Mobile giảm 12% so với tuần trước. Kiểm tra luồng thanh toán và tốc độ tải trang.">
+          <span class="insight-icon warning"><i class="ph-fill ph-warning-circle"></i></span><span class="insight-copy"><strong>Chuyển đổi Mobile giảm</strong><small>Tỷ lệ chuyển đổi thấp hơn mức dự kiến</small></span><span class="negative">−12%</span><i class="ph ph-caret-right"></i>
+        </button>
+        <button class="insight-card" data-action="detail" data-title="Organic Search tăng trưởng" data-description="Lưu lượng từ Organic Search tăng 23%, tạo ra 1.240 phiên truy cập chất lượng.">
+          <span class="insight-icon positive"><i class="ph-fill ph-sparkle"></i></span><span class="insight-copy"><strong>Organic Search tăng</strong><small>Hiệu suất cao hơn mức dự kiến</small></span><span class="positive-text">+23%</span><i class="ph ph-caret-right"></i>
+        </button>
+      </section>
+
+      <section class="section-block traffic-block">
+        <div class="section-title"><div><h2>Nguồn truy cập</h2><p>Phân bố trong 7 ngày qua</p></div><button class="text-button" data-action="analytics">Phân tích</button></div>
+        <div class="traffic-content tappable" data-page="traffic"><div class="donut"><div><strong>24K</strong><small>phiên</small></div></div><div class="legend"><p><i class="dot teal"></i>Organic Search <b>42%</b></p><p><i class="dot indigo"></i>Direct Traffic <b>30%</b></p><p><i class="dot orange"></i>Social Media <b>15%</b></p><p><i class="dot gray"></i>Referral <b>13%</b></p></div></div>
+      </section>
     </section>
 
-    <div class="app-layout hidden" id="main-app">
-        <!-- Sidebar Navigation -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <div class="logo">
-                    <i class="ph-fill ph-rocket-launch"></i>
-                    <span>DataInsight</span>
-                </div>
-            </div>
-            <nav class="sidebar-nav">
-                <a href="#" class="nav-item active" id="nav-overview"><i class="ph ph-squares-four"></i> Tổng quan</a>
-                <a href="#" class="nav-item" id="nav-forecast"><i class="ph ph-chart-line-up"></i> Dự báo</a>
-                <a href="#" class="nav-item" id="nav-activity"><i class="ph ph-activity"></i> Hoạt động</a>
-                <a href="#" class="nav-item" id="nav-customers"><i class="ph ph-users"></i> Khách hàng</a>
-                <div class="nav-divider"></div>
-                <div class="sidebar-label">Tài khoản</div>
-                <a href="#" class="nav-item" id="btn-logout"><i class="ph ph-sign-out"></i> Đăng xuất</a>
-            </nav>
-            <div class="sidebar-footer">
-                <div class="user-profile">
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User">
-                    <div class="user-info">
-                        <span class="name">Admin</span>
-                        <span class="role">Data Scientist</span>
-                    </div>
-                </div>
-            </div>
-        </aside>
+    <section class="screen" id="analytics-screen">
+      <header class="app-header"><button class="icon-button back-button" data-action="home"><i class="ph ph-caret-left"></i></button><div class="brand">Phân tích chi tiết</div><button class="icon-button" data-action="search"><i class="ph ph-magnifying-glass"></i></button></header>
+      <div class="screen-scroll"><div class="page-heading compact"><div><p class="eyebrow">HIỆU SUẤT KÊNH</p><h1>Phân tích</h1></div><button class="filter-button" data-page="advanced-filter"><i class="ph ph-sliders-horizontal"></i> Bộ lọc</button></div>
+      <article class="analysis-card dark"><p>DOANH THU THEO KÊNH</p><h2>₫84,230 <span class="trend up">+7.8%</span></h2><div class="mini-bars"><i style="height:36%"></i><i style="height:52%"></i><i style="height:42%"></i><i style="height:76%"></i><i style="height:59%"></i><i style="height:91%"></i><i style="height:72%"></i></div><div class="chart-days"><span>T2</span><span>T3</span><span>T4</span><span>T5</span><span>T6</span><span>T7</span><span>CN</span></div></article>
+      <h2 class="list-heading">Chỉ số theo kênh</h2><div class="channel-list"><button><span class="channel-icon google">G</span><span><b>Google Analytics</b><small>Organic Search</small></span><strong>₫38,421</strong><i class="ph ph-caret-right"></i></button><button><span class="channel-icon facebook"><i class="ph-fill ph-facebook-logo"></i></span><span><b>Facebook Ads</b><small>Paid Social</small></span><strong>₫24,892</strong><i class="ph ph-caret-right"></i></button><button><span class="channel-icon email"><i class="ph-fill ph-envelope-simple"></i></span><span><b>Email campaign</b><small>Direct marketing</small></span><strong>₫12,908</strong><i class="ph ph-caret-right"></i></button></div></div>
+    </section>
 
-        <div class="main-content">
-            <!-- Top Bar -->
-            <header class="top-bar">
-                <div class="page-title">
-                    <h2>Dashboard Phân tích dữ liệu doanh nghiệp</h2>
-                    <p>Chào mừng trở lại! Dưới đây là phân tích mới nhất.</p>
-                    <p style="font-size: 14px; color: #94a3b8;">Hệ thống được phát triển bởi <strong>Hoàng Mạnh Trường</strong></p>
-                </div>
-                    <div class="header-actions">
-                        <div class="notification-wrapper">
-                            <button class="btn btn-icon" id="btn-notif">
-                                <i class="ph ph-bell"></i>
-                                <span class="notif-badge hidden"></span>
-                            </button>
-                            <div id="notif-panel" class="notif-panel glass hidden">
-                                <div class="notif-header">Thông báo AI</div>
-                                <div id="notif-list" class="notif-list">
-                                    <div class="notif-empty">Không có thông báo mới</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="search-global search-container">
-                        <i class="ph ph-magnifying-glass"></i>
-                        <input type="text" id="global-search" placeholder="Tìm kiếm nhanh...">
-                        <div id="autocomplete-results" class="autocomplete-list hidden"></div>
-                    </div>
-                    <button class="btn btn-outline-white" id="btn-export">
-                        <i class="ph ph-file-pdf"></i> Xuất báo cáo
-                    </button>
-                    <button class="btn btn-primary" onclick="document.getElementById('csv-upload').click()">
-                        <i class="ph ph-upload-simple"></i> Tải dữ liệu
-                    </button>
-                    <input type="file" id="csv-upload" accept=".csv" hidden>
-                </div>
-            </header>
+    <section class="screen" id="insights-screen"><header class="app-header"><div class="brand">Insights</div><button class="icon-button" data-action="search"><i class="ph ph-magnifying-glass"></i></button></header><div class="screen-scroll"><div class="page-heading compact"><div><p class="eyebrow">CẬP NHẬT HÔM NAY</p><h1>Insights</h1></div><span class="pill">4 mới</span></div><article class="featured-insight"><span><i class="ph-fill ph-sparkle"></i></span><p>INSIGHT NỔI BẬT</p><h2>Khách hàng từ Google có xu hướng quay lại cao hơn 34%</h2><button data-action="detail" data-title="Khách hàng từ Google" data-description="Tệp khách hàng đến từ Google Search có tỷ lệ quay lại trong 30 ngày cao hơn 34% so với các kênh khác.">Xem phân tích <i class="ph ph-arrow-right"></i></button></article><div class="insight-timeline"><p class="timeline-label">CƠ HỘI</p><button class="timeline-item" data-action="detail" data-title="Cơ hội tăng trưởng" data-description="Campaign Summer Sale có thể đạt thêm 18% doanh thu nếu tăng ngân sách Social trong 5 ngày tới."><i class="ph-fill ph-lightbulb"></i><span><b>Campaign Summer Sale</b><small>ROI dự kiến cao trong 5 ngày tới</small></span><em>High ROI</em></button><p class="timeline-label">CẦN LƯU Ý</p><button class="timeline-item" data-action="detail" data-title="Bounce rate Mobile tăng" data-description="Bounce rate trên Mobile tăng 9%. Nên ưu tiên kiểm tra trải nghiệm trang sản phẩm."><i class="ph-fill ph-warning"></i><span><b>Bounce rate Mobile tăng</b><small>Người dùng rời trang nhanh hơn</small></span><em class="red">−9%</em></button></div></div></section>
 
-            <main class="dashboard-body">
-                <!-- Welcome/Upload Zone (Overlay when no data) -->
-                <section id="upload-zone" class="upload-overlay">
-                    <div class="upload-box">
-                        <div class="upload-icon-pulse">
-                            <i class="ph ph-cloud-arrow-up"></i>
-                        </div>
-                        <h2>Sẵn sàng phân tích?</h2>
-                        <p>Tải lên tệp CSV để kích hoạt các tính năng AI mạnh mẽ.</p>
-                        <div class="upload-actions">
-                            <button class="btn btn-primary btn-lg" onclick="document.getElementById('csv-upload').click()">
-                                Bắt đầu ngay
-                            </button>
-                            <button class="btn btn-outline-white btn-lg" id="btn-demo">
-                                Dùng thử mẫu
-                            </button>
-                        </div>
+    <section class="screen" id="alerts-screen"><header class="app-header"><div class="brand">Cảnh báo</div><button class="icon-button" data-action="search"><i class="ph ph-magnifying-glass"></i></button></header><div class="screen-scroll"><div class="page-heading compact"><div><p class="eyebrow">THEO DÕI BIẾN ĐỘNG</p><h1>Cảnh báo</h1></div><button class="filter-button">Đã đọc</button></div><div class="alert-list"><article class="alert high"><span><i class="ph-fill ph-warning-octagon"></i></span><div><p class="alert-tag">NGHIÊM TRỌNG · 10:24</p><h2>Doanh thu giảm bất thường</h2><p>Doanh thu hôm nay thấp hơn 21% so với mức trung bình.</p><button data-action="detail" data-title="Doanh thu giảm bất thường" data-description="Doanh thu hôm nay thấp hơn mức trung bình 21%. Kênh đóng góp chính là Paid Social.">Xem chi tiết</button></div></article><article class="alert medium"><span><i class="ph-fill ph-info"></i></span><div><p class="alert-tag">THEO DÕI · 09:10</p><h2>Ngân sách Ads sắp đạt ngưỡng</h2><p>Đã sử dụng 82% ngân sách tháng cho Facebook Ads.</p></div></article><article class="alert success"><span><i class="ph-fill ph-check-circle"></i></span><div><p class="alert-tag">CẬP NHẬT · HÔM QUA</p><h2>Conversion đã phục hồi</h2><p>Tỷ lệ chuyển đổi đã tăng lại sau tối ưu landing page.</p></div></article></div></div></section>
 
-                        <!-- Skeleton Preview (Feedback) -->
-                        <div class="skeleton-header">Bố cục Dashboard dự kiến</div>
-                        <div class="skeleton-preview">
-                            <div class="sk-card"><i class="ph ph-trend-up"></i></div>
-                            <div class="sk-card"><i class="ph ph-currency-dollar"></i></div>
-                            <div class="sk-card"><i class="ph ph-smiley"></i></div>
-                            <div class="sk-card"><i class="ph ph-crown"></i></div>
-                            <div class="sk-chart"></div>
-                            <div class="sk-side"></div>
-                        </div>
-                    </div>
-                </section>
+    <section class="screen" id="profile-screen"><header class="app-header"><div class="brand">Hồ sơ & cài đặt</div><button class="icon-button" data-page="notifications"><i class="ph ph-bell"></i></button></header><div class="screen-scroll"><div class="profile-hero"><div class="profile-avatar">TA</div><h1>Trương Anh</h1><p>Data Analyst · Nexus Team</p><button class="outline-button" data-page="edit-profile">Chỉnh sửa hồ sơ</button></div><button class="screen-map-button" data-page="ui-map"><span><b>Khám phá bộ UI mobile</b><small>Đủ 29 màn hình · dữ liệu demo</small></span><i class="ph ph-grid-four"></i></button><div class="settings-group"><p>TÀI KHOẢN</p><button data-page="account"><i class="ph ph-user"></i>Thông tin cá nhân<i class="ph ph-caret-right"></i></button><button data-page="notifications"><i class="ph ph-bell"></i>Thông báo <span class="toggle on"></span></button><button data-page="security"><i class="ph ph-shield-check"></i>Bảo mật<i class="ph ph-caret-right"></i></button></div><div class="settings-group"><p>ỨNG DỤNG</p><button data-page="settings"><i class="ph ph-palette"></i>Giao diện <small>Tự động</small><i class="ph ph-caret-right"></i></button><button data-page="support"><i class="ph ph-question"></i>Trợ giúp<i class="ph ph-caret-right"></i></button><button data-action="logout"><i class="ph ph-sign-out"></i>Đăng xuất<i class="ph ph-caret-right"></i></button></div></div></section>
 
-                <!-- Dashboard Content -->
-                <div id="dashboard" class="dashboard-content hidden">
-                    
-                    <!-- Loading Overlay (NEW) -->
-                    <div id="loading-overlay" class="loading-state hidden">
-                        <div class="spinner"></div>
-                        <span>AI đang phân tích insight...</span>
-                    </div>
+    <section class="screen secondary-screen" id="secondary-screen">
+      <header class="app-header"><button class="icon-button" data-action="back"><i class="ph ph-caret-left"></i></button><div class="brand" id="secondary-header">Chi tiết</div><button class="icon-button" data-action="secondary-menu"><i class="ph ph-dots-three"></i></button></header>
+      <div class="screen-scroll" id="secondary-content"></div>
+    </section>
 
-                    <!-- Anomaly Banner -->
-                    <div id="anomaly-container" class="alert-banner hidden">
-                        <i class="ph ph-warning-octagon"></i>
-                        <div class="alert-text">
-                            <strong>Phát hiện bất thường:</strong> <span id="anomaly-text">...</span>
-                        </div>
-                    </div>
-
-                    <!-- SMART FILTER BAR -->
-                    <div id="filter-bar" class="filter-bar glass">
-                        <div class="filter-group">
-                            <span class="filter-label"><i class="ph ph-clock-countdown"></i> Khoảng TG</span>
-                            <div class="filter-chips" id="period-chips">
-                                <button class="chip active" data-period="all">Tất cả</button>
-                                <button class="chip" data-period="month">Tháng này</button>
-                                <button class="chip" data-period="quarter">3 tháng</button>
-                                <button class="chip" data-period="half">6 tháng</button>
-                                <button class="chip" data-period="year">Năm nay</button>
-                            </div>
-                        </div>
-                        <div class="filter-sep"></div>
-                        <div class="filter-group">
-                            <span class="filter-label"><i class="ph ph-calendar-blank"></i> Tùy chỉnh</span>
-                            <div class="date-range-wrap">
-                                <input type="date" id="filter-date-from" class="date-input" title="Từ ngày">
-                                <span class="date-sep">→</span>
-                                <input type="date" id="filter-date-to" class="date-input" title="Đến ngày">
-                            </div>
-                        </div>
-                        <div class="filter-sep" id="region-sep"></div>
-                        <div class="filter-group" id="region-filter-group">
-                            <span class="filter-label"><i class="ph ph-map-pin"></i> Khu vực</span>
-                            <div class="filter-chips" id="region-chips">
-                                <button class="chip active" data-region="all">Tất cả</button>
-                            </div>
-                        </div>
-                        <div class="filter-sep" id="cat-sep"></div>
-                        <div class="filter-group" id="cat-filter-group">
-                            <span class="filter-label"><i class="ph ph-tag"></i> Danh mục</span>
-                            <div class="filter-chips" id="category-chips">
-                                <button class="chip active" data-cat="all">Tất cả</button>
-                            </div>
-                        </div>
-                        <div class="filter-actions">
-                            <div class="filter-active-count hidden" id="filter-active-count">
-                                <i class="ph ph-funnel-simple"></i>
-                                <span id="filter-count-num">0</span> bộ lọc
-                            </div>
-                            <button class="btn-filter-reset hidden" id="btn-reset-filters" title="Đặt lại tất cả">
-                                <i class="ph ph-arrow-counter-clockwise"></i> Đặt lại
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- TABS CONTAINER -->
-                    <div id="tabs-container">
-                        
-                        <!-- TAB: OVERVIEW (Existing content) -->
-                        <section id="tab-overview" class="tab-content active">
-                            <!-- Tầng 1: KPI Grid -->
-                    <div class="kpi-grid">
-                        <div class="kpi-card glass ai">
-                            <div class="kpi-meta">
-                                <span class="label">Dự báo tháng tới</span>
-                                <span class="ai-tag">AI Forecast</span>
-                            </div>
-                            <div class="value" id="kpi-forecast">$0</div>
-                            <div class="trend up"><i class="ph ph-trend-up"></i> 8.4% <span>vs TB</span></div>
-                        </div>
-                        <div class="kpi-card glass">
-                            <div class="kpi-meta">
-                                <span class="label">Doanh thu tháng này</span>
-                                <i class="ph ph-currency-circle-dollar"></i>
-                            </div>
-                            <div class="value" id="kpi-revenue">$0</div>
-                            <div class="trend up"><i class="ph ph-trend-up"></i> 12.5% <span>vs tháng trước</span></div>
-                        </div>
-                        <div class="kpi-card glass sentiment-card">
-                            <div class="kpi-meta">
-                                <span class="label">Cảm xúc KH</span>
-                                <span class="ai-tag">AI NLP</span>
-                            </div>
-                            <div class="sentiment-top">
-                                <div class="sentiment-emoji" id="kpi-sentiment">😊</div>
-                                <div class="sentiment-score-wrap">
-                                    <div class="sentiment-score-bar">
-                                        <div class="sentiment-score-fill" id="sentiment-bar-fill" style="width:0%"></div>
-                                    </div>
-                                    <span class="sentiment-score-label" id="sentiment-score">0/10</span>
-                                </div>
-                            </div>
-                            <div class="sentiment-sparkline-wrap">
-                                <canvas id="sentimentSparkline" height="44"></canvas>
-                            </div>
-                            <div class="sentiment-tags" id="sentiment-tags">
-                                <!-- Tags được sinh động -->
-                            </div>
-                        </div>
-                        <div class="kpi-card glass">
-                            <div class="kpi-meta">
-                                <span class="label">Khách hàng VIP</span>
-                                <i class="ph ph-crown"></i>
-                            </div>
-                            <div class="value" id="kpi-vips">0</div>
-                            <div class="trend up">Tăng trưởng</div>
-                        </div>
-                    </div>
-
-                    <!-- Tầng 2: Visual Insights -->
-                    <div class="visual-row">
-                        <div class="card glass chart-main">
-                            <div class="card-header">
-                                <div>
-                                    <h3>Xu hướng & Dự báo</h3>
-                                    <p class="subtitle">Phân tích Time-Series bằng AI</p>
-                                </div>
-                                <div class="chart-legend">
-                                    <span class="dot actual"></span> Thực tế
-                                    <span class="dot forecast"></span> Dự báo
-                                </div>
-                            </div>
-                            <div class="chart-wrap">
-                                <canvas id="forecastChart"></canvas>
-                            </div>
-                        </div>
-                        <div class="card glass chart-side">
-                            <div class="card-header">
-                                <h3>Phân khúc khách hàng</h3>
-                            </div>
-                            <div class="chart-wrap">
-                                <canvas id="segmentChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Tầng 3: Details & AI Recs -->
-                    <div class="data-row">
-                        <div class="card glass recs">
-                            <div class="card-header" style="margin-bottom:0.75rem">
-                                <div>
-                                    <h3>Gợi ý Up-sell AI</h3>
-                                    <p class="subtitle">Phân tích hành vi & cơ hội bán thêm</p>
-                                </div>
-                                <span class="ai-tag">AI Engine</span>
-                            </div>
-                            <div id="recommendation-list" class="upsell-stack">
-                                <!-- AI Items rendered dynamically -->
-                            </div>
-                        </div>
-                        <div class="card glass table-view">
-                            <div class="card-header">
-                                <h3>Chi tiết đơn hàng</h3>
-                                <div class="table-actions">
-                                    <select id="category-filter" class="select-minimal">
-                                        <option value="all">Tất cả danh mục</option>
-                                    </select>
-                                    <input type="text" id="table-search" placeholder="Lọc nhanh...">
-                                    <div class="table-export-btns">
-                                        <button class="btn-table-export" id="btn-export-csv" title="Xuất CSV">
-                                            <i class="ph ph-file-csv"></i> CSV
-                                        </button>
-                                        <button class="btn-table-export excel" id="btn-export-excel" title="Xuất Excel">
-                                            <i class="ph ph-file-xls"></i> Excel
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="table-container">
-                                <table id="data-table">
-                                    <thead><tr id="table-header"></tr></thead>
-                                    <tbody id="table-body"></tbody>
-                                </table>
-                            </div>
-                            <div class="table-footer">
-                                <div id="table-info" class="table-info"></div>
-                                <div id="table-pagination" class="table-pagination"></div>
-                            </div>
-                        </section>
-
-                        <!-- TAB: ACTIVITY (NEW) -->
-                        <section id="tab-activity" class="tab-content hidden">
-                            <!-- Tầng 1: KPI Grid (6 items) -->
-                            <div class="kpi-grid-6">
-                                <div class="kpi-card glass">
-                                    <div class="kpi-meta"><span class="label">Number of Emails</span></div>
-                                    <div class="value">129</div>
-                                    <div class="trend up">11.8% <span>Target</span></div>
-                                </div>
-                                <div class="kpi-card glass">
-                                    <div class="kpi-meta"><span class="label">Number of Calls</span></div>
-                                    <div class="value">86</div>
-                                    <div class="trend up">17.2% <span>Target</span></div>
-                                </div>
-                                <div class="kpi-card glass">
-                                    <div class="kpi-meta"><span class="label">Number of Meetings</span></div>
-                                    <div class="value">85</div>
-                                    <div class="trend up">13.8% <span>Target</span></div>
-                                </div>
-                                <div class="kpi-card glass">
-                                    <div class="kpi-meta"><span class="label">Response Rate</span></div>
-                                    <div class="value">45%</div>
-                                    <div class="trend up">4.3% <span>Target</span></div>
-                                </div>
-                                <div class="kpi-card glass">
-                                    <div class="kpi-meta"><span class="label">Calls/Meeting Conv.</span></div>
-                                    <div class="value">30</div>
-                                    <div class="trend up">17% <span>Target</span></div>
-                                </div>
-                                <div class="kpi-card glass">
-                                    <div class="kpi-meta"><span class="label">Follow-up Success</span></div>
-                                    <div class="value">55%</div>
-                                    <div class="trend up">2.3% <span>Target</span></div>
-                                </div>
-                            </div>
-
-                            <!-- Tầng 2: Activity Charts Row 1 -->
-                            <div class="activity-row">
-                                <div class="card glass">
-                                    <div class="card-header"><h3>Lead Source Analysis</h3></div>
-                                    <div class="chart-wrap-small"><canvas id="leadSourceChart"></canvas></div>
-                                </div>
-                                <div class="card glass">
-                                    <div class="card-header"><h3>Emails Sent per Day</h3></div>
-                                    <div class="chart-wrap-small"><canvas id="emailsDayChart"></canvas></div>
-                                </div>
-                                <div class="card glass">
-                                    <div class="card-header"><h3>Follow-up Sessions</h3></div>
-                                    <div class="chart-wrap-small"><canvas id="followUpChart"></canvas></div>
-                                </div>
-                            </div>
-
-                            <!-- Tầng 3: Activity Charts Row 2 -->
-                            <div class="activity-row">
-                                <div class="card glass">
-                                    <div class="card-header"><h3>New vs Recurring Stats</h3></div>
-                                    <div class="chart-wrap-small"><canvas id="salesStatsChart"></canvas></div>
-                                </div>
-                                <div class="card glass">
-                                    <div class="card-header"><h3>Calls per Day</h3></div>
-                                    <div class="chart-wrap-small"><canvas id="callsDayChart"></canvas></div>
-                                </div>
-                                <div class="card glass">
-                                    <div class="card-header"><h3>Average Response Time</h3></div>
-                                    <div class="chart-wrap-small"><canvas id="responseTimeChart"></canvas></div>
-                                </div>
-                            </div>
-
-                            <!-- Tầng 4: Audit Log + Staff Performance -->
-                            <div class="activity-row activity-2col">
-                                <div class="card glass">
-                                    <div class="card-header" style="margin-bottom:0.75rem">
-                                        <div>
-                                            <h3>Nhật ký hoạt động</h3>
-                                            <p class="subtitle">Cập nhật theo dữ liệu thực</p>
-                                        </div>
-                                        <span class="live-badge"><i class="ph ph-circle-fill"></i> LIVE</span>
-                                    </div>
-                                    <div id="audit-log" class="audit-log"></div>
-                                </div>
-                                <div class="card glass">
-                                    <div class="card-header" style="margin-bottom:0.75rem">
-                                        <div>
-                                            <h3>So sánh hiệu suất Sale</h3>
-                                            <p class="subtitle">Cuộc gọi · Email · Gặp mặt</p>
-                                        </div>
-                                        <span class="ai-tag">AI Rank</span>
-                                    </div>
-                                    <div style="height:260px"><canvas id="staffPerformanceChart"></canvas></div>
-                                </div>
-                            </div>
-                        </section>
-
-                        <!-- TAB: FORECAST (NEW) -->
-                        <section id="tab-forecast" class="tab-content hidden">
-                            <div class="forecast-deep-grid">
-                                <div class="card glass">
-                                    <h3>Cấu trúc dự báo chi tiết</h3>
-                                    <p class="subtitle">Phân tích dựa trên thuật toán Prophet (Mô phỏng)</p>
-                                    <div class="chart-wrap-large">
-                                        <canvas id="forecastChartDeep"></canvas>
-                                    </div>
-                                </div>
-                                <div class="card glass what-if">
-                                    <h3><i class="ph ph-magic-wand"></i> Công cụ Giả lập (What-if)</h3>
-                                    <div class="simulator-controls">
-                                        <label>Giả định tăng trưởng (%)</label>
-                                        <input type="range" id="growth-range" min="-50" max="100" value="10">
-                                        <div class="sim-result">
-                                            <span>Kết quả dự kiến:</span>
-                                            <strong id="sim-value">$0</strong>
-                                        </div>
-                                    </div>
-                                    <div class="ai-note">
-                                        <i class="ph ph-info"></i>
-                                        AI nhận thấy nếu tăng trưởng đạt <span style="color: #10b981; font-weight: 600;">15%</span>, bạn nên nhập thêm hàng vào <span style="color: #8b5cf6; font-weight: 600;">tuần thứ 3</span>.
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- PRESCRIPTIVE ANALYTICS ROW -->
-                            <div class="activity-row activity-2col" style="margin-top: 1.5rem;">
-                                <!-- Khuyến nghị hành động (XAI & Auto Actions) -->
-                                <div class="card glass">
-                                    <div class="card-header" style="margin-bottom:0.75rem">
-                                        <div>
-                                            <h3>Khuyến nghị Hành động (XAI)</h3>
-                                            <p class="subtitle">AI phân tích nguyên nhân và đề xuất hành động</p>
-                                        </div>
-                                        <span class="ai-tag" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">Prescriptive AI</span>
-                                    </div>
-                                    <div class="xai-container">
-                                        <div class="xai-reasoning" style="background: rgba(255, 255, 255, 0.03); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 3px solid #6366f1;">
-                                            <p style="margin: 0; font-size: 0.95rem; line-height: 1.5; color: #e2e8f0;">
-                                                <i class="ph-fill ph-lightbulb" style="color: #f59e0b; margin-right: 4px;"></i>
-                                                <strong>Lý do dự báo tăng:</strong> Mô hình nhận diện chu kỳ tăng trưởng mạnh từ kênh <em>Lazada</em> trong 3 tháng qua, kết hợp với hiệu ứng mùa vụ cuối năm.
-                                            </p>
-                                        </div>
-                                        <h4 style="margin: 0 0 0.75rem 0; font-size: 0.9rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Hành động tự động đề xuất</h4>
-                                        <div class="auto-actions" style="display: flex; flex-direction: column; gap: 0.75rem;">
-                                            <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
-                                                <div style="display: flex; align-items: center; gap: 12px;">
-                                                    <i class="ph-fill ph-megaphone" style="color: #06b6d4; font-size: 1.25rem;"></i>
-                                                    <div>
-                                                        <strong style="display: block; font-size: 0.95rem; color: #e2e8f0;">Tạo chiến dịch khuyến mãi</strong>
-                                                        <span style="font-size: 0.8rem; color: #94a3b8;">Tập trung khu vực Hà Nội (ROI dự kiến +18%)</span>
-                                                    </div>
-                                                </div>
-                                                <button class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;" onclick="showToast('Đã lên lịch chiến dịch thành công!', 'success', 'ph-check-circle')">Thực thi ngay</button>
-                                            </div>
-                                            <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.2); padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
-                                                <div style="display: flex; align-items: center; gap: 12px;">
-                                                    <i class="ph-fill ph-package" style="color: #10b981; font-size: 1.25rem;"></i>
-                                                    <div>
-                                                        <strong style="display: block; font-size: 0.95rem; color: #e2e8f0;">Nhập thêm hàng hóa</strong>
-                                                        <span style="font-size: 0.8rem; color: #94a3b8;">50 đơn vị Màn hình 2K (Dự kiến cháy hàng sau 14 ngày)</span>
-                                                    </div>
-                                                </div>
-                                                <button class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.85rem;" onclick="showToast('Đã tạo đơn đặt hàng tự động!', 'success', 'ph-check-circle')">Tạo đơn</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <!-- Tối ưu hóa ngân sách (Budget Optimizer) -->
-                                <div class="card glass">
-                                    <div class="card-header" style="margin-bottom:0.75rem">
-                                        <div>
-                                            <h3>Tối ưu hóa ngân sách (Marketing)</h3>
-                                            <p class="subtitle">Phân bổ dựa trên thuật toán tối ưu ROI</p>
-                                        </div>
-                                        <button class="btn btn-outline-white" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;" onclick="showToast('Đã áp dụng phân bổ ngân sách!', 'success', 'ph-magic-wand')">
-                                            <i class="ph ph-arrows-merge"></i> Tự động phân bổ
-                                        </button>
-                                    </div>
-                                    <div class="budget-optimizer" style="display: flex; flex-direction: column; gap: 1rem; height: 100%;">
-                                        <div style="height: 180px;">
-                                            <canvas id="budgetOptimizationChart"></canvas>
-                                        </div>
-                                        <div class="budget-stats" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                                            <div style="background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 8px; text-align: center;">
-                                                <span style="display: block; font-size: 0.8rem; color: #94a3b8; margin-bottom: 4px;">Ngân sách tổng</span>
-                                                <strong style="font-size: 1.2rem; color: #e2e8f0;">150.000.000đ</strong>
-                                            </div>
-                                            <div style="background: rgba(16,185,129,0.1); padding: 0.75rem; border-radius: 8px; text-align: center; border: 1px solid rgba(16,185,129,0.2);">
-                                                <span style="display: block; font-size: 0.8rem; color: #10b981; margin-bottom: 4px;">ROI kỳ vọng (AI)</span>
-                                                <strong style="font-size: 1.2rem; color: #10b981;">+24.5%</strong>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        <!-- TAB: CUSTOMERS (NEW) -->
-                        <section id="tab-customers" class="tab-content hidden">
-                            <div class="customer-deep-grid">
-                                <div class="card glass">
-                                    <h3>Bản đồ phân khúc khách hàng</h3>
-                                    <div class="chart-wrap">
-                                        <canvas id="segmentChartDeep"></canvas>
-                                    </div>
-                                </div>
-                                <div class="card glass">
-                                    <h3>Top khách hàng giá trị cao</h3>
-                                    <div id="top-customers-list" class="customer-list">
-                                        <!-- Dynamic items -->
-                                    </div>
-                                    <button class="btn btn-outline-white" style="width: 100%; margin-top: 1rem; justify-content: center;">
-                                        Xem tất cả khách hàng <i class="ph ph-arrow-right"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </section>
-
-                    </div>
-                </div>
-            </main>
-        </div>
-    </div>
-
-        <footer>
-            <p>&copy; 2026 DataInsight - AI Powered Analytics</p>
-        </footer>
-    </div>
-
-    <!-- Conversational BI Chat Widget (NEW) -->
-    <div id="ai-chat-widget" class="chat-widget closed glass">
-        <div class="chat-launcher" onclick="document.getElementById('ai-chat-widget').classList.toggle('closed')">
-            <i class="ph-fill ph-chat-circle-dots"></i>
-        </div>
-        <div class="chat-header" onclick="document.getElementById('ai-chat-widget').classList.toggle('closed')">
-            <div class="chat-title">
-                <i class="ph-fill ph-sparkle" style="color: #10b981;"></i> DataInsight Chat
-            </div>
-            <i class="ph ph-caret-down"></i>
-        </div>
-        <div class="chat-body" id="chat-body">
-            <div class="chat-message ai">
-                <div class="msg-bubble">Xin chào! Tôi là Trợ lý AI. Bạn muốn phân tích dữ liệu gì hôm nay? (VD: Vùng nào doanh thu thấp nhất?)</div>
-            </div>
-        </div>
-        <div class="chat-footer">
-            <input type="text" id="chat-input" placeholder="Hỏi AI về dữ liệu...">
-            <button id="btn-chat-send"><i class="ph-fill ph-paper-plane-right"></i></button>
-        </div>
-    </div>
-
-    <!-- Toast Notification Container (NEW) -->
-    <div id="toast-container"></div>
-
-    <script src="app.js"></script>
-    <script>
-        // Logic Đăng nhập dự phòng (Inline)
-        document.addEventListener('DOMContentLoaded', function() {
-            const loginScreen = document.getElementById('login-screen');
-            const mainApp = document.getElementById('main-app');
-            const btnLogin = document.getElementById('btn-login');
-            const quickLogin = document.getElementById('quick-login');
-
-            const handleLogin = () => {
-                const user = document.getElementById('username').value.trim();
-                const pass = document.getElementById('password').value.trim();
-                if (user === 'admin' && pass === '123') {
-                    loginScreen.style.display = 'none';
-                    mainApp.classList.remove('hidden');
-                    mainApp.style.display = 'flex';
-                } else {
-                    alert('Sai mật khẩu! Gợi ý: admin / 123');
-                }
-            };
-
-            if (btnLogin) btnLogin.onclick = handleLogin;
-            if (quickLogin) quickLogin.onclick = (e) => {
-                e.preventDefault();
-                document.getElementById('username').value = 'admin';
-                document.getElementById('password').value = '123';
-                handleLogin();
-            };
-        });
-    </script>
+    <nav class="bottom-nav" aria-label="Điều hướng chính"><button class="active" data-screen="home"><i class="ph-fill ph-squares-four"></i><span>Tổng quan</span></button><button data-screen="analytics"><i class="ph ph-chart-line-up"></i><span>Phân tích</span></button><button data-screen="insights"><i class="ph ph-lightbulb"></i><span>Insights</span></button><button data-screen="alerts" class="alert-nav"><i class="ph ph-warning"></i><span>Cảnh báo</span><b>2</b></button><button data-screen="profile"><i class="ph ph-user-circle"></i><span>Hồ sơ</span></button></nav>
+  </main>
+  <main class="desktop-shell" aria-label="Nexus Analytics web dashboard">
+    <aside class="web-sidebar">
+      <div class="web-brand"><span class="brand-mark">N</span><span>Nexus<br><small>Analytics</small></span></div>
+      <nav><button class="active" data-web-screen="overview"><i class="ph ph-squares-four"></i>Tổng quan</button><button data-web-screen="realtime"><i class="ph ph-pulse"></i>Thời gian thực</button><button data-web-screen="funnel"><i class="ph ph-funnel"></i>Phân tích</button><div class="web-subnav"><button data-web-screen="retention">Retention</button><button data-web-screen="cohort">Cohort</button><button data-web-screen="segmentation">Phân khúc</button></div><button data-web-screen="insights"><i class="ph ph-lightbulb"></i>Intelligence <b>4</b></button><button data-web-screen="reports"><i class="ph ph-file-text"></i>Báo cáo</button><button data-web-screen="sources"><i class="ph ph-database"></i>Dữ liệu</button><button data-web-screen="dashboards"><i class="ph ph-layout"></i>Dashboards</button><button data-web-screen="members"><i class="ph ph-users"></i>Quản trị</button></nav>
+      <button class="web-user" data-action="logout" title="Đăng xuất"><span>TA</span><div><b>Trương Anh</b><small>Data Analyst</small></div><i class="ph ph-sign-out"></i></button>
+    </aside>
+    <section class="web-main">
+      <header class="web-topbar"><div class="web-search"><i class="ph ph-magnifying-glass"></i><input placeholder="Tìm kiếm chỉ số, báo cáo..."/><kbd>⌘ K</kbd></div><div class="web-actions"><button><i class="ph ph-question"></i></button><button class="web-notification"><i class="ph ph-bell"></i><b></b></button><button class="web-export"><i class="ph ph-export"></i>Xuất báo cáo</button></div></header>
+      <div class="web-content">
+        <section class="web-panel active" id="overview-web-panel">
+          <div class="web-heading"><div><p>11 THÁNG 8, 2026</p><h1>Chào buổi sáng, Trương</h1><span>Đây là tình hình kinh doanh của bạn hôm nay.</span></div><div class="web-period"><button>Hôm nay</button><button class="active">7 ngày</button><button>30 ngày</button><button><i class="ph ph-calendar-blank"></i> Tùy chỉnh</button></div></div>
+          <div class="web-kpi-grid"><article><div><p>TỔNG DOANH THU</p><i class="ph-fill ph-currency-circle-dollar teal-icon"></i></div><h2>₫124,592</h2><span class="web-up"><i class="ph ph-arrow-up-right"></i>12.5%</span><small>so với kỳ trước</small><div class="spark teal-spark"></div></article><article><div><p>NGƯỜI DÙNG</p><i class="ph-fill ph-users-three purple-icon"></i></div><h2>42,108</h2><span class="web-up"><i class="ph ph-arrow-up-right"></i>8.2%</span><small>so với kỳ trước</small><div class="spark purple-spark"></div></article><article><div><p>CHUYỂN ĐỔI</p><i class="ph-fill ph-funnel coral-icon"></i></div><h2>3.42%</h2><span class="web-down"><i class="ph ph-arrow-down-right"></i>0.5%</span><small>so với kỳ trước</small><div class="spark red-spark"></div></article><article><div><p>PHIÊN TRUY CẬP</p><i class="ph-fill ph-cursor-click blue-icon"></i></div><h2>48,204</h2><span class="web-up"><i class="ph ph-arrow-up-right"></i>14.8%</span><small>so với kỳ trước</small><div class="spark blue-spark"></div></article></div>
+          <div class="web-dashboard-grid"><article class="web-card revenue-card"><div class="web-card-title"><div><h2>Xu hướng doanh thu</h2><p>Doanh thu theo ngày trong 7 ngày qua</p></div><button>7 ngày <i class="ph ph-caret-down"></i></button></div><div class="web-line-chart"><div class="axis"><span>₫30K</span><span>₫20K</span><span>₫10K</span><span>₫0</span></div><svg viewBox="0 0 700 230" preserveAspectRatio="none"><defs><linearGradient id="webArea" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#17aaa2" stop-opacity=".24"/><stop offset="1" stop-color="#17aaa2" stop-opacity="0"/></linearGradient></defs><path d="M0 190 L80 169 L160 175 L240 123 L320 139 L400 91 L480 110 L560 62 L630 73 L700 25 L700 230 L0 230Z" fill="url(#webArea)"/><path d="M0 190 L80 169 L160 175 L240 123 L320 139 L400 91 L480 110 L560 62 L630 73 L700 25" fill="none" stroke="#109b95" stroke-width="4" stroke-linecap="round"/><circle cx="700" cy="25" r="6" fill="#fff" stroke="#109b95" stroke-width="4"/></svg><div class="web-axis-days"><span>T2</span><span>T3</span><span>T4</span><span>T5</span><span>T6</span><span>T7</span><span>CN</span></div></div></article>
+            <article class="web-card attention-card"><div class="web-card-title"><div><h2>Điểm cần chú ý</h2><p>Phát hiện bởi Nexus AI</p></div><button data-web-screen="web-insights">Xem tất cả</button></div><div class="web-insight warning-bg"><i class="ph-fill ph-warning-circle"></i><div><b>Chuyển đổi Mobile giảm</b><small>Thấp hơn 12% so với dự kiến</small></div><strong>−12%</strong></div><div class="web-insight success-bg"><i class="ph-fill ph-sparkle"></i><div><b>Organic Search tăng</b><small>Hiệu suất cao hơn dự kiến</small></div><strong>+23%</strong></div><div class="web-insight purple-bg"><i class="ph-fill ph-lightning"></i><div><b>Campaign Summer Sale</b><small>Tiềm năng ROI cao</small></div><strong>High ROI</strong></div></article>
+            <article class="web-card source-card"><div class="web-card-title"><div><h2>Nguồn truy cập</h2><p>Phân bố phiên theo kênh</p></div><button data-web-screen="web-analytics">Chi tiết</button></div><div class="web-source-content"><div class="web-donut"><span><b>24.8K</b><small>phiên</small></span></div><div><p><i class="dot teal"></i>Organic Search <b>42%</b></p><p><i class="dot indigo"></i>Direct Traffic <b>30%</b></p><p><i class="dot orange"></i>Social Media <b>15%</b></p><p><i class="dot gray"></i>Referral <b>13%</b></p></div></div></article>
+            <article class="web-card campaign-card"><div class="web-card-title"><div><h2>Chiến dịch hàng đầu</h2><p>Hiệu suất theo doanh thu</p></div><button data-web-screen="web-reports">Xem báo cáo</button></div><table><thead><tr><th>CHIẾN DỊCH</th><th>DOANH THU</th><th>CHUYỂN ĐỔI</th></tr></thead><tbody><tr><td><span class="campaign-color c1"></span><b>Summer Sale 2026</b></td><td>₫42,430</td><td><em>4.8%</em></td></tr><tr><td><span class="campaign-color c2"></span><b>Back to School</b></td><td>₫31,290</td><td><em>3.9%</em></td></tr><tr><td><span class="campaign-color c3"></span><b>Product Launch V2</b></td><td>₫18,920</td><td><em>3.2%</em></td></tr></tbody></table></article></div>
+        </section>
+        <section class="web-panel" id="dynamic-web-panel"></section>
+      </div>
+    </section>
+  </main>
+  <div class="modal-backdrop" id="modal"><article class="detail-modal"><button class="modal-close" data-action="close"><i class="ph ph-x"></i></button><span class="modal-icon"><i class="ph-fill ph-chart-line-up"></i></span><p class="eyebrow">PHÂN TÍCH AI</p><h2 id="modal-title">Chi tiết</h2><p id="modal-description"></p><button class="primary-button" data-action="close">Đã hiểu</button></article></div>
+  <div class="search-overlay" id="search-overlay"><div class="search-box"><i class="ph ph-magnifying-glass"></i><input autofocus placeholder="Tìm chỉ số, báo cáo..." /><button data-action="close-search">Hủy</button></div><p>Gợi ý</p><button data-action="analytics">Doanh thu theo kênh</button><button data-action="insights">Insights mới nhất</button></div>
+  <script src="frontend/resource-state.js"></script>
+  <script src="frontend/api-client.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

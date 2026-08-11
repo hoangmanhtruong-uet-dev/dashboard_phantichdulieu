@@ -1,0 +1,14 @@
+{
+  "name": "nexus-analytics-frontend",
+  "private": true,
+  "version": "4.0.0",
+  "scripts": {
+    "lint": "node --check frontend/resource-state.js && node --check frontend/api-client.js && node --check app.js",
+    "typecheck": "tsc -p jsconfig.json",
+    "test": "node --test frontend/tests/*.test.js",
+    "build": "node scripts/build.js"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}
