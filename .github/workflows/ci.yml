@@ -1,0 +1,81 @@
+name: nexus-ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  quality-and-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: nexus_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d nexus_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/nexus_test
+      TEST_REDIS_URL: redis://127.0.0.1:6379/15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: |
+          pip install -r requirements.txt -r requirements-dev.txt
+          npm ci
+      - name: Format
+        run: python -m ruff format --check backend data tests scripts ai_service.py
+      - name: Lint
+        run: python -m ruff check backend data tests scripts ai_service.py
+      - name: Backend typecheck
+        run: python -m mypy backend data ai_service.py
+      - name: Migration checksums
+        run: python -m scripts.validate_migrations
+      - name: Unit and infrastructure integration tests
+        run: python -m unittest discover -s tests -v
+      - name: Frontend lint
+        run: npm run lint
+      - name: Frontend typecheck
+        run: npm run typecheck
+      - name: Frontend tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+
+  staging-smoke:
+    needs: quality-and-integration
+    if: ${{ github.event_name == 'workflow_dispatch' && vars.STAGING_API_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Liveness and fail-closed readiness
+        env:
+          STAGING_API_URL: ${{ vars.STAGING_API_URL }}
+        run: |
+          curl --fail --silent --show-error "$STAGING_API_URL/health/live"
+          curl --fail --silent --show-error "$STAGING_API_URL/health/ready"

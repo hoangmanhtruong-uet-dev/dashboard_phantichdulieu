@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from data.database import connection
+from data.database import connection, is_postgres, table_exists
 
 
 RESOURCE_COLUMNS: dict[str, dict[str, Any]] = {
@@ -53,17 +53,13 @@ def _escape_like(value: str) -> str:
 
 
 class NexusRepository:
-    def __init__(self, database_path: Path):
+    def __init__(self, database_path: Path | str):
         self.database_path = database_path
 
     def table_exists(self, table_name: str) -> bool:
         with connection(self.database_path) as conn:
-            return (
-                conn.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-                    (table_name,),
-                ).fetchone()
-                is not None
+            return table_exists(
+                conn, table_name, postgres=is_postgres(self.database_path)
             )
 
     def latest_order_date(self, workspace_id: int) -> Optional[str]:

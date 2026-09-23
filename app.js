@@ -70,12 +70,16 @@ function metricChart() {
 
 const ingestionFields = [
   ['timestamp','Thời gian','DATE_TIME',true],
-  ['revenue','Doanh thu','NUMBER',true],
+  ['revenue','Doanh thu','NUMBER',false],
   ['event_id','Mã sự kiện','STRING',false],
+  ['event_name','Tên sự kiện','STRING',false],
+  ['user_id','Mã người dùng','STRING',false],
   ['customer_id','Mã khách hàng','STRING',false],
+  ['session_id','Mã phiên','STRING',false],
   ['category','Danh mục','STRING',false],
   ['region','Khu vực','STRING',false],
   ['source','Nguồn','STRING',false],
+  ['device','Thiết bị','STRING',false],
   ['product','Sản phẩm','STRING',false],
   ['currency','Tiền tệ','STRING',false],
   ['is_conversion','Chuyển đổi','BOOLEAN',false]
@@ -192,9 +196,9 @@ function renderWebPage(key) {
   if (type === 'members') return `${webHeading(title,description,'Mời thành viên')}<div class="member-invite"><input type="email" placeholder="email@company.com"><select><option>VIEWER</option><option>ANALYST</option><option>ADMIN</option></select><button class="dark-button" data-action="invite-member">Gửi lời mời</button><span role="status"></span></div><div class="reference-table" id="workspace-members"><p class="loading-state">Đang tải thành viên...</p></div>`;
   if (type === 'reports') return `${webHeading(title,description,'Tạo báo cáo')}<form class="web-create-form" data-create-resource="report"><input name="name" placeholder="Tên báo cáo" required><select name="report_type"><option value="performance">Hiệu suất</option><option value="cohort">Cohort</option><option value="custom">Tùy chỉnh</option></select><button class="dark-button" type="submit">Tạo bản nháp</button><span role="status"></span></form><div class="web-resource-controls">${resourceToolbar('web-reports')}</div><div class="resource-host web-resource-host" data-resource-host="web-reports">${skeletonMarkup(4)}</div>`;
   if (type === 'alerts') return `${webHeading(title,description,'Tạo cảnh báo')}<form class="web-create-form" data-create-resource="alert"><input name="title" placeholder="Tên cảnh báo" required><input name="description" placeholder="Mô tả" required><select name="severity"><option value="medium">Theo dõi</option><option value="high">Nghiêm trọng</option><option value="low">Thấp</option></select><button class="dark-button" type="submit">Tạo cảnh báo</button><span role="status"></span></form><div class="web-resource-controls">${resourceToolbar('web-alerts')}</div><div class="resource-host web-resource-host" data-resource-host="web-alerts">${skeletonMarkup(4)}</div>`;
-  if (['insights','pulse','funnel','cohort','revenue'].includes(type)) return `${webHeading(title,description,'Làm mới')}<div class="web-resource-controls">${type === 'insights' ? resourceToolbar('web-insights') : dateToolbar(`web-${type}`)}</div><div class="resource-host web-resource-host" data-resource-host="web-${type}">${skeletonMarkup(4)}</div>`;
+  if (['insights','pulse','funnel','cohort','revenue','retention','forecast','anomaly','table'].includes(type)) return `${webHeading(title,description,'Làm mới')}<div class="web-resource-controls">${type === 'insights' ? resourceToolbar('web-insights') : ['funnel','revenue'].includes(type) ? dateToolbar(`web-${type}`) : ''}</div><div class="resource-host web-resource-host" data-resource-host="web-${type}">${skeletonMarkup(4)}</div>`;
   if (type === 'sources') return `${webHeading(title,'Tải CSV/XLSX, kiểm tra dữ liệu và theo dõi từng lần nhập','Nhập từ tệp')}<div class="web-resource-controls">${resourceToolbar('web-sources')}</div><div class="resource-host web-resource-host" data-resource-host="web-sources">${skeletonMarkup(3)}</div>${ingestionWorkspace(false)}`;
-  if (['dashboards','builder','table','journey','retention','forecast','events','quality','export','activity','settings','explorer','anomaly'].includes(type)) return `${webHeading(title,description,'Chưa khả dụng')}${blockedMarkup('Backend chưa có capability tương ứng. Màn hình được giữ nguyên trong điều hướng nhưng mọi thao tác giả đã bị khóa.')}`;
+  if (['dashboards','builder','journey','events','quality','export','activity','settings','explorer'].includes(type)) return `${webHeading(title,description,'Chưa khả dụng')}${blockedMarkup('Màn hình này chưa được nối workflow đầy đủ. Mọi thao tác giả được khóa rõ ràng.')}`;
   if (type === 'pulse') return `${webHeading(title,description,'Tạm dừng')} ${webKpis([['ĐANG HOẠT ĐỘNG','1,284','+12.4%'],['SỰ KIỆN / PHÚT','3,821','+8.1%'],['DOANH THU 30 PHÚT','₫12,840','+18.3%'],['CHUYỂN ĐỔI','3.82%','-0.2%']])}<div class="reference-grid wide"><article class="reference-card"><h3>Hoạt động trong 30 phút gần nhất</h3><div class="reference-bars">${[35,48,42,66,52,81,74,96,86,70,92,78].map(v=>`<i style="height:${v}%"></i>`).join('')}</div></article><article class="reference-card"><h3>Hoạt động gần đây</h3><div class="live-feed"><p><i></i><span><b>purchase_completed</b><small>Hà Nội · 10 giây trước</small></span></p><p><i></i><span><b>checkout_started</b><small>TP.HCM · 24 giây trước</small></span></p><p><i></i><span><b>product_viewed</b><small>Đà Nẵng · 41 giây trước</small></span></p></div></article></div>`;
   if (type === 'funnel') return `${webHeading(title,description,'Tạo Funnel')}${webKpis([['TỶ LỆ HOÀN TẤT','12.5%','+2.4%'],['THỜI GIAN TB','8m 42s','-1.1%'],['ĐIỂM RƠI LỚN NHẤT','Giỏ hàng',''],['TỔNG NGƯỜI DÙNG','58K','+5.8%']])}<article class="reference-card funnel-card"><h3>Users theo bước chuyển đổi</h3><div class="funnel-visual"><span style="width:92%">Truy cập · 124,592</span><span style="width:76%">Xem sản phẩm · 94,018</span><span style="width:59%">Thêm giỏ hàng · 52,809</span><span style="width:43%">Bắt đầu checkout · 28,420</span><span style="width:29%">Hoàn tất · 15,574</span></div></article>`;
   if (type === 'retention') return `${webHeading(title,description)}${webKpis([['DAY 1 RETENTION','61%','+2.4%'],['DAY 7 RETENTION','32%','-1.1%'],['DAY 14 RETENTION','24%','+0.5%'],['DAY 30 RETENTION','18%','+3.2%']])}<article class="reference-card retention-card"><h3>Retention theo thời gian</h3><div class="retention-lines"><i></i><i></i><i></i><i></i></div><div class="chart-labels"><span>Ngày 0</span><span>Ngày 7</span><span>Ngày 14</span><span>Ngày 21</span><span>Ngày 30</span></div></article><div class="info-banner"><i class="ph-fill ph-lightbulb"></i><div><b>Thông tin chi tiết</b><p>Organic Search có Day-30 Retention cao hơn 18% so với mức trung bình.</p></div></div>`;
@@ -324,7 +328,6 @@ const listResourceApi = {
   'data-sources': query => NexusAPI.dataSources(query),
   'web-reports': query => NexusAPI.reports(query),
   'web-alerts': query => NexusAPI.alerts(query),
-  'web-insights': query => NexusAPI.insights(query),
   'web-sources': query => NexusAPI.dataSources(query)
 };
 
@@ -439,10 +442,11 @@ async function loadMobileInsights(force = false) {
   if (!host) return;
   host.innerHTML = skeletonMarkup(4);
   try {
-    const response = await resourceRequests.run('mobile-insights', signal => NexusAPI.insights({page_size:20},{signal,force}));
-    if (!response.data.length) return void (host.innerHTML = emptyMarkup());
-    const [featured,...items] = response.data;
-    host.innerHTML = `<div class="page-heading compact"><div><p class="eyebrow">DỮ LIỆU WORKSPACE</p><h1>Insights</h1></div><span class="pill">${response.meta.pagination.total}</span></div><article class="featured-insight"><span><i class="ph-fill ph-sparkle"></i></span><p>${escapeHtml(featured.insight_type)}</p><h2>${escapeHtml(featured.title)}</h2><button data-action="detail" data-title="${escapeHtml(featured.title)}" data-description="${escapeHtml(featured.description)}">Xem phân tích <i class="ph ph-arrow-right"></i></button></article><div class="insight-timeline">${items.map(item => `<button class="timeline-item" data-action="detail" data-title="${escapeHtml(item.title)}" data-description="${escapeHtml(item.description)}"><i class="ph-fill ${item.insight_type==='warning'?'ph-warning':'ph-lightbulb'}"></i><span><b>${escapeHtml(item.title)}</b><small>${escapeHtml(item.description)}</small></span><em>${escapeHtml(item.change_value || item.severity)}</em></button>`).join('')}</div>`;
+    const response = await resourceRequests.run('mobile-insights', signal => NexusAPI.insightExplanations({signal,force}));
+    const items = response.data.items || [];
+    if (!items.length) return void (host.innerHTML = emptyMarkup('Chưa có bất thường để giải thích. Số liệu không được AI tự tạo.'));
+    const [featured,...rest] = items;
+    host.innerHTML = `<div class="page-heading compact"><div><p class="eyebrow">ENGINE XÁC ĐỊNH</p><h1>Insights</h1></div><span class="pill">${items.length}</span></div><article class="featured-insight"><span><i class="ph-fill ph-sparkle"></i></span><p>${escapeHtml(featured.type)}</p><h2>${escapeHtml(featured.text)}</h2></article><div class="insight-timeline">${rest.map(item => `<div class="timeline-item"><i class="ph-fill ph-warning"></i><span><b>${escapeHtml(item.type)}</b><small>${escapeHtml(item.text)}</small></span><em>${escapeHtml(item.severity)}</em></div>`).join('')}</div>`;
   } catch (error) { if (error?.code !== 'STALE_REQUEST') host.innerHTML = errorMarkup(error,'mobile-insights'); }
 }
 
@@ -523,7 +527,7 @@ async function loadWebResource(key, force = false) {
   const resourceKey = `web-${type}`;
   if (listResourceApi[resourceKey]) return loadListResource(resourceKey, force);
   const host = resourceHosts(resourceKey)[0];
-  if (!host || !['pulse','funnel','cohort','revenue'].includes(type)) return;
+  if (!host || !['insights','pulse','funnel','cohort','revenue','retention','forecast','anomaly','table'].includes(type)) return;
   host.innerHTML = skeletonMarkup(4);
   try {
     let response;
@@ -531,7 +535,15 @@ async function loadWebResource(key, force = false) {
     if (type === 'funnel') response = await resourceRequests.run(resourceKey, signal => NexusAPI.funnel(analyticsQuery(resourceKey,7),{signal,force}));
     if (type === 'cohort') response = await resourceRequests.run(resourceKey, signal => NexusAPI.cohort({signal,force}));
     if (type === 'revenue') response = await resourceRequests.run(resourceKey, signal => NexusAPI.revenue(analyticsQuery(resourceKey,30),{signal,force}));
-    if (type === 'pulse') {
+    if (type === 'retention') response = await resourceRequests.run(resourceKey, signal => NexusAPI.retention({signal,force}));
+    if (type === 'forecast') response = await resourceRequests.run(resourceKey, signal => NexusAPI.forecast({horizon:7},{signal,force}));
+    if (type === 'anomaly') response = await resourceRequests.run(resourceKey, signal => NexusAPI.anomalies({signal,force}));
+    if (type === 'table') response = await resourceRequests.run(resourceKey, signal => NexusAPI.segments({signal,force}));
+    if (type === 'insights') response = await resourceRequests.run(resourceKey, signal => NexusAPI.insightExplanations({signal,force}));
+    if (type === 'insights') {
+      const items = response.data.items || [];
+      host.innerHTML = items.length ? `<div class="web-section-grid">${items.map(item => `<article><i class="ph ph-warning"></i><h3>${escapeHtml(item.type)}</h3><p>${escapeHtml(item.text)}</p><span class="status-pill">${escapeHtml(item.severity)}</span></article>`).join('')}</div>` : emptyMarkup('Chưa có bất thường để giải thích. AI ngoài chưa được bật.');
+    } else if (type === 'pulse') {
       const rows = response.data || [];
       const total = rows.reduce((sum,row) => sum + Number(row.Amount || 0),0);
       host.innerHTML = rows.length ? webMetricHtml('Giao dịch gần nhất', [['GIAO DỊCH',formatCompactNumber(rows.length),''],['DOANH THU',formatCurrency(total),''],['KHÁCH HÀNG',formatCompactNumber(new Set(rows.map(row=>row.CustomerID)).size),'']], webTable(rows.slice(0,10), [{label:'MÃ ĐƠN',key:'OrderID'},{label:'DANH MỤC',key:'Category'},{label:'KHU VỰC',key:'Region'},{label:'GIÁ TRỊ',render:item=>formatCurrency(item.Amount)},{label:'THỜI GIAN',render:item=>formatDate(item.OrderDate)}])) : emptyMarkup();
@@ -540,7 +552,19 @@ async function loadWebResource(key, force = false) {
       host.innerHTML = webMetricHtml('Users theo bước chuyển đổi', [['TỶ LỆ HOÀN TẤT',`${data.completion_rate}%`,''],['TỔNG TRUY CẬP',formatCompactNumber(data.steps[0]?.users || 0),''],['HOÀN TẤT',formatCompactNumber(data.steps.at(-1)?.users || 0),'']], `<div class="funnel-visual">${data.steps.map(step=>`<span style="width:${Math.max(step.rate,22)}%">${escapeHtml(step.name)} · ${formatCompactNumber(step.users)} · ${step.rate}%</span>`).join('')}</div>`);
     } else if (type === 'cohort') {
       const data = response.data;
-      host.innerHTML = webMetricHtml('Retention theo Cohort', [['COHORT',String(data.cohorts.length),''],['NGƯỜI DÙNG',formatCompactNumber(data.cohorts.reduce((sum,row)=>sum+row.users,0)),'']], `<div class="cohort-grid">${data.cohorts.flatMap(row=>row.retention.map(value=>`<span style="opacity:${Math.max(.15,value/100)}">${value}%</span>`)).join('')}</div>`);
+      host.innerHTML = webMetricHtml('Retention theo Cohort', [['COHORT',String(data.cohorts.length),''],['NGƯỜI DÙNG',formatCompactNumber(data.cohorts.reduce((sum,row)=>sum+row.users,0)),'']], `<div class="cohort-grid">${data.cohorts.flatMap(row=>row.retention.map(value=>value === null ? '<span style="opacity:.15">—</span>' : `<span style="opacity:${Math.max(.15,value/100)}">${value}%</span>`)).join('')}</div>`);
+    } else if (type === 'retention') {
+      const data = response.data; const cells = data.periods || [];
+      host.innerHTML = data.cohort_users ? webMetricHtml('Retention theo ngày', cells.map(item=>[`DAY ${item.day}`,`${item.retention_rate}%`,`${item.retained_users}/${item.eligible_users}`]), `<div class="info-banner"><div><b>Tiêu chí</b><p>${escapeHtml(data.retained_event)}</p></div></div>`) : emptyMarkup('Chưa có event signup có user_id.');
+    } else if (type === 'forecast') {
+      const data = response.data;
+      host.innerHTML = data.status === 'READY' ? webMetricHtml('Dự báo doanh thu baseline', [['MAE',formatCurrency(data.holdout.mae),''],['RMSE',formatCurrency(data.holdout.rmse),''],['HOLDOUT',`${data.holdout.days} ngày`,'']], `<div class="reference-bars">${data.forecast.map(row=>`<i style="height:${Math.max(6,row.value/(Math.max(...data.forecast.map(item=>item.value),1))*100)}%" title="${escapeHtml(row.date)} · ${formatCurrency(row.value)}"></i>`).join('')}</div><p>${escapeHtml(data.uncertainty)}</p>`) : emptyMarkup(`Cần tối thiểu ${data.minimum_days} ngày, hiện có ${data.available_days}.`);
+    } else if (type === 'anomaly') {
+      const items = response.data.anomalies || [];
+      host.innerHTML = items.length ? webMetricHtml('Bất thường doanh thu', [['PHÁT HIỆN',String(items.length),''],['PHƯƠNG PHÁP','7 ngày / 3σ','']], webTable(items, [{label:'NGÀY',key:'date'},{label:'QUAN SÁT',render:item=>formatCurrency(item.observed)},{label:'KỲ VỌNG',render:item=>formatCurrency(item.expected)},{label:'MỨC ĐỘ',key:'severity'}])) : emptyMarkup('Không phát hiện bất thường theo ngưỡng 3σ.');
+    } else if (type === 'table') {
+      const items = response.data || [];
+      host.innerHTML = items.length ? webMetricHtml('Phân khúc đã lưu', [['PHÂN KHÚC',String(items.length),'']], webTable(items, [{label:'TÊN',key:'name'},{label:'KIỂU',key:'match_type'},{label:'NGƯỜI DÙNG',render:item=>formatCompactNumber(item.metrics.user_count)},{label:'SỰ KIỆN',render:item=>formatCompactNumber(item.metrics.event_count)}])) : emptyMarkup('Chưa có phân khúc server-side được lưu.');
     } else {
       const data = response.data; const total = data.daily.reduce((sum,row)=>sum+Number(row.revenue||0),0);
       host.innerHTML = webMetricHtml('Doanh thu theo ngày', [['TỔNG DOANH THU',formatCurrency(total),''],['ĐƠN HÀNG',formatCompactNumber(data.daily.reduce((sum,row)=>sum+Number(row.orders||0),0)),''],['KHU VỰC',String(data.by_region.length),'']], `<div class="reference-bars">${data.daily.slice(-14).map(row=>`<i style="height:${Math.max(6,Number(row.revenue||0)/(Math.max(...data.daily.map(item=>Number(item.revenue||0)),1))*100)}%" title="${escapeHtml(row.label)} · ${formatCurrency(row.revenue)}"></i>`).join('')}</div>`);
@@ -562,8 +586,8 @@ function setIngestionStatus(message, kind = '') {
 function suggestedColumn(field, columns) {
   const aliases = {
     timestamp: ['timestamp','created_at','date','datetime','order_date','time'], revenue: ['revenue','amount','sales','total','value'],
-    event_id: ['event_id','order_id','id'], customer_id: ['customer_id','user_id','client_id'], category: ['category','type'],
-    region: ['region','country','location'], source: ['source','channel'], product: ['product','product_name','item'],
+    event_id: ['event_id','order_id','id'], event_name: ['event_name','event','event_type'], user_id: ['user_id','distinct_id'], customer_id: ['customer_id','client_id'], session_id: ['session_id','session'], category: ['category','type'],
+    region: ['region','country','location'], source: ['source','channel'], device: ['device','device_type','platform'], product: ['product','product_name','item'],
     currency: ['currency','currency_code'], is_conversion: ['is_conversion','converted','conversion']
   };
   const normalize = value => value.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -583,7 +607,7 @@ function renderImportPreview(payload) {
   const content = `<div class="ingestion-steps"><b class="done">1 Tải lên</b><b class="done">2 Xem trước</b><b>3 Ánh xạ</b><b>4 Nhập</b></div>
     <div class="preview-summary"><span><b>${preview.row_count}</b>dòng</span><span><b>${preview.column_count}</b>cột</span><span><b>${preview.formula_cells_ignored || 0}</b>công thức bỏ qua</span></div>
     <div class="preview-table"><table><thead><tr>${headers}</tr></thead><tbody>${rows}</tbody></table></div>
-    <form class="mapping-form"><div class="mapping-heading"><div><h3>Ánh xạ cột</h3><p>Hai trường có dấu * là bắt buộc. Dữ liệu sai kiểu sẽ không bị tự động ép.</p></div></div><div class="mapping-grid">${mappings}</div><label class="partial-option"><input type="checkbox" name="allow_partial"> Nhập các dòng hợp lệ và giữ lại lỗi để kiểm tra</label><button type="button" class="dark-button" data-action="run-file-import">Kiểm tra & nhập dữ liệu</button></form>`;
+    <form class="mapping-form"><div class="mapping-heading"><div><h3>Ánh xạ cột</h3><p>Thời gian là bắt buộc; chọn tên sự kiện hoặc doanh thu. File doanh thu cũ sẽ được xem là purchase.</p></div></div><div class="mapping-grid">${mappings}</div><label class="partial-option"><input type="checkbox" name="allow_partial"> Nhập các dòng hợp lệ và giữ lại lỗi để kiểm tra</label><button type="button" class="dark-button" data-action="run-file-import">Kiểm tra & nhập dữ liệu</button></form>`;
   document.querySelectorAll('.ingestion-preview').forEach(container => { container.innerHTML = content; });
 }
 
@@ -1041,3 +1065,17 @@ async function initializeAuth() {
 }
 
 initializeAuth();
+function reportClientError(message, component = 'window') {
+  const base = (window.NEXUS_CONFIG?.apiBaseUrl || '').replace(/\/$/, '');
+  const body = JSON.stringify({
+    message: String(message || 'Unknown frontend error').slice(0, 500),
+    page: `${location.origin}${location.pathname}`.slice(0, 300),
+    component: String(component).slice(0, 100),
+  });
+  navigator.sendBeacon?.(`${base}/api/client-errors`, new Blob([body], { type: 'application/json' }));
+}
+
+window.addEventListener('error', event => reportClientError(event.message, 'window.error'));
+window.addEventListener('unhandledrejection', event => {
+  reportClientError(event.reason?.message || String(event.reason), 'unhandledrejection');
+});

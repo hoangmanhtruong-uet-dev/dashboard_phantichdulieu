@@ -98,9 +98,7 @@ class Phase4ApiIntegrationTests(unittest.TestCase):
             "/api/dashboard/overview?date_from=2026-08-31&date_to=2026-08-01"
         )
         self.assertEqual(400, invalid.status_code, invalid.text)
-        incomplete = self.client.get(
-            "/api/dashboard/overview?date_from=2026-08-01"
-        )
+        incomplete = self.client.get("/api/dashboard/overview?date_from=2026-08-01")
         self.assertEqual(400, incomplete.status_code, incomplete.text)
 
     def test_profile_conflict_is_409(self):

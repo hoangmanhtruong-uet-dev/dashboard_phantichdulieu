@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Callable
 
 import jwt
@@ -27,8 +26,7 @@ class AuthContext:
 
 
 def get_auth_repository(request: Request) -> AuthRepository:
-    database_path = Path(request.app.state.database_path)
-    return AuthRepository(database_path)
+    return AuthRepository(request.app.state.database_path)
 
 
 def require_csrf(request: Request) -> None:

@@ -1,12 +1,13 @@
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, File, Query, Request, UploadFile
 
 from backend.auth.dependencies import AuthContext, require_admin, require_csrf
+from backend.config import settings
+from backend.infrastructure.storage import create_storage
 from backend.ingestion.schemas import CANONICAL_SCHEMA, ImportRequest, PreviewRequest
 from backend.ingestion.service import IngestionService
 from backend.query import PageSpec, query_meta
 from backend.responses import success_response
+from backend.operations.repository import OperationsRepository
 from data.ingestion_repository import IngestionRepository
 
 
@@ -14,8 +15,8 @@ router = APIRouter(prefix="/api/ingestion", tags=["data-ingestion"])
 
 
 def get_ingestion_service(request: Request) -> IngestionService:
-    repository = IngestionRepository(Path(request.app.state.database_path))
-    return IngestionService(repository, Path(request.app.state.upload_dir))
+    repository = IngestionRepository(request.app.state.database_path)
+    return IngestionService(repository, request.app.state.storage)
 
 
 @router.get("/schema")
@@ -34,8 +35,40 @@ async def upload_file(
 ):
     job = await service.upload(file, context.workspace_id, context.user_id)
     return success_response(
-        {"job": job, "next_status": "UPLOADED", "processing_mode": "synchronous"}
+        {
+            "job": job,
+            "next_status": "UPLOADED",
+            "processing_mode": request_processing_mode(service),
+        }
     )
+
+
+def request_processing_mode(service: IngestionService) -> str:
+    return "durable-storage"
+
+
+def process_import_job(
+    database_path,
+    job_id: str,
+    workspace_id: int,
+    payload: dict,
+    background_job_id: str,
+    correlation_id: str,
+) -> None:
+    database_path = database_path or settings.database_path
+    operations = OperationsRepository(database_path)
+    operations.begin_background_job(background_job_id)
+    try:
+        service = IngestionService(
+            IngestionRepository(database_path), create_storage(settings)
+        )
+        service.run_import(job_id, workspace_id, ImportRequest.model_validate(payload))
+        operations.finish_background_job(background_job_id, "COMPLETED")
+    except Exception as exc:
+        operations.finish_background_job(
+            background_job_id, "FAILED", type(exc).__name__
+        )
+        raise
 
 
 @router.post("/jobs/{job_id}/preview")
@@ -55,10 +88,52 @@ def preview_file(
 def import_file(
     job_id: str,
     payload: ImportRequest,
+    request: Request,
     context: AuthContext = Depends(require_admin),
     _csrf: None = Depends(require_csrf),
     service: IngestionService = Depends(get_ingestion_service),
 ):
+    if settings.app_env in {"staging", "production"}:
+        job = service._job(job_id, context.workspace_id)
+        if job["status"] != "PREVIEWED":
+            from backend.ingestion.parser import IngestionError
+
+            raise IngestionError(
+                "INVALID_JOB_STATE", "Preview the file before importing", 409
+            )
+        background_id = f"import:{job_id}"
+        operations = OperationsRepository(request.app.state.database_path)
+        operations.create_background_job(
+            job_id=background_id,
+            workspace_id=context.workspace_id,
+            job_type="IMPORT",
+            resource_id=job_id,
+            correlation_id=request.state.request_id,
+            idempotency_key=job_id,
+        )
+        try:
+            request.app.state.job_queue.enqueue(
+                process_import_job,
+                None,
+                job_id,
+                context.workspace_id,
+                payload.model_dump(),
+                background_id,
+                request.state.request_id,
+                job_id=background_id,
+            )
+        except Exception as exc:
+            operations.finish_background_job(
+                background_id, "FAILED", type(exc).__name__
+            )
+            from backend.ingestion.parser import IngestionError
+
+            raise IngestionError(
+                "QUEUE_UNAVAILABLE", "Import queue is unavailable", 503
+            ) from exc
+        return success_response(
+            {"job": job, "processing_mode": "queued", "queue_job_id": background_id}
+        )
     return success_response(service.run_import(job_id, context.workspace_id, payload))
 
 

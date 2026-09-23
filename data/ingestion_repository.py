@@ -11,7 +11,7 @@ def now_iso() -> str:
 
 
 class IngestionRepository:
-    def __init__(self, database_path: Path):
+    def __init__(self, database_path: Path | str):
         self.database_path = database_path
 
     def create_job(self, values: dict) -> dict:
@@ -19,13 +19,14 @@ class IngestionRepository:
         with connection(self.database_path) as conn:
             conn.execute(
                 """INSERT INTO import_jobs
-                   (id,workspace_id,created_by,original_filename,stored_filename,file_hash,file_size,mime_type,file_type,status,created_at,updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,'UPLOADED',?,?)""",
+                   (id,workspace_id,created_by,original_filename,stored_filename,object_key,file_hash,file_size,mime_type,file_type,status,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,'UPLOADED',?,?)""",
                 (
                     values["id"],
                     values["workspace_id"],
                     values["created_by"],
                     values["original_filename"],
+                    values["stored_filename"],
                     values["stored_filename"],
                     values["file_hash"],
                     values["file_size"],
@@ -282,33 +283,58 @@ class IngestionRepository:
                 ),
             )
             source_id = source_cursor.lastrowid
-            batch: list[tuple] = []
+            order_batch: list[tuple] = []
+            event_batch: list[tuple] = []
             inserted = 0
             for row_number, row in normalized_rows:
-                batch.append(
+                event_batch.append(
                     (
-                        row["event_id"],
-                        row.get("customer_id"),
-                        row.get("category"),
-                        row.get("region"),
-                        row["revenue"],
-                        row["timestamp"],
                         job["workspace_id"],
+                        row["event_id"],
+                        row.get("user_id") or row.get("customer_id"),
+                        row.get("session_id"),
+                        row["event_name"],
+                        row["timestamp"],
+                        row.get("revenue", 0),
+                        row.get("source"),
+                        row.get("device"),
+                        row.get("region"),
+                        row.get("product") or row.get("category"),
                         job["id"],
                         source_id,
-                        row.get("source"),
-                        row.get("product"),
-                        row.get("currency"),
-                        1 if row.get("is_conversion", True) else 0,
-                        job["id"],
-                        row_number,
+                        now,
                     )
                 )
-                if len(batch) >= 500:
-                    inserted += self._insert_orders(conn, batch)
-                    batch.clear()
-            if batch:
-                inserted += self._insert_orders(conn, batch)
+                if row["event_name"] == "purchase":
+                    order_batch.append(
+                        (
+                            row["event_id"],
+                            row.get("customer_id"),
+                            row.get("category"),
+                            row.get("region"),
+                            row.get("revenue", 0),
+                            row["timestamp"],
+                            job["workspace_id"],
+                            job["id"],
+                            source_id,
+                            row.get("source"),
+                            row.get("product"),
+                            row.get("currency"),
+                            1 if row.get("is_conversion", True) else 0,
+                            job["id"],
+                            row_number,
+                        )
+                    )
+                if len(event_batch) >= 500:
+                    inserted += self._insert_events(conn, event_batch)
+                    event_batch.clear()
+                if len(order_batch) >= 500:
+                    self._insert_orders(conn, order_batch)
+                    order_batch.clear()
+            if event_batch:
+                inserted += self._insert_events(conn, event_batch)
+            if order_batch:
+                self._insert_orders(conn, order_batch)
             if inserted != valid_count:
                 raise RuntimeError(
                     "Normalized row count did not match validation result"
@@ -340,10 +366,25 @@ class IngestionRepository:
         )
         return conn.total_changes - before
 
+    def _insert_events(self, conn, rows: list[tuple]) -> int:
+        before = conn.total_changes
+        conn.executemany(
+            """INSERT INTO analytics_events
+               (workspace_id,event_id,user_id,session_id,event_name,occurred_at,revenue,
+                source,device,region,product,import_job_id,data_source_id,created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            rows,
+        )
+        return conn.total_changes - before
+
     def fail_processing(self, job_id: str, workspace_id: int, summary: str) -> None:
         with connection(self.database_path) as conn:
             conn.execute(
                 "DELETE FROM orders WHERE import_job_id=? AND workspace_id=?",
+                (job_id, workspace_id),
+            )
+            conn.execute(
+                "DELETE FROM analytics_events WHERE import_job_id=? AND workspace_id=?",
                 (job_id, workspace_id),
             )
             conn.execute(

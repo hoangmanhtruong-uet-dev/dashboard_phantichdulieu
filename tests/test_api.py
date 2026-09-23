@@ -91,7 +91,10 @@ class ApiIntegrationTests(unittest.TestCase):
     def test_migrations_are_current(self):
         status = migration_status(self.database_path)
         self.assertTrue(status["current"])
-        self.assertEqual(["001", "002", "003", "004"], status["applied"])
+        self.assertEqual(
+            ["001", "002", "003", "004", "005", "006", "007"],
+            status["applied"],
+        )
 
     def test_register_login_and_incorrect_password(self):
         other = self.new_client()

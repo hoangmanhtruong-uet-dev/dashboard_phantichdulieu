@@ -124,3 +124,60 @@ The current contract is treated as v1 without a URL prefix to preserve compatibi
 | Change member roles | no | no | no | yes |
 
 Every resource query is scoped by the active `workspace_id` derived from the server-side session. Client-supplied workspace IDs are never trusted as authorization.
+# Phase 5 analytics endpoints
+
+All analytics endpoints derive the workspace from the authenticated session. Date ranges are inclusive UTC dates and `date_from`/`date_to` must be supplied together.
+
+| Method | Endpoint | Minimum role | Result |
+|---|---|---|---|
+| GET | `/api/analytics/revenue` | VIEWER | Revenue/AOV/ARPU/users/sessions/conversion, previous period, daily series and dimensions. |
+| GET | `/api/analytics/funnel` | VIEWER | Ordered session funnel; optional comma-separated `steps`. |
+| GET | `/api/analytics/retention` | VIEWER | Exact D1/D7/D14/D30 signup retention. |
+| GET | `/api/analytics/cohort` | VIEWER | Monday-anchored signup cohort W0-W7 matrix. |
+| GET | `/api/analytics/segments` | VIEWER | Saved server-side segments with current counts. |
+| POST | `/api/analytics/segments/preview` | ANALYST + CSRF | Validate and calculate allowlisted rules without saving. |
+| POST | `/api/analytics/segments` | ANALYST + CSRF | Save an allowlisted segment definition. |
+| GET | `/api/analytics/anomalies` | VIEWER | Deterministic daily-revenue detections and expected ranges. |
+| GET | `/api/analytics/forecast?horizon=7` | VIEWER | Reproducible baseline forecast, holdout metrics, and uncertainty. |
+| GET | `/api/analytics/insights/explanations` | VIEWER | Deterministic explanations over engine output; external AI disabled. |
+
+Metric semantics and missing-identifier coverage behavior are normative in `docs/ANALYTICS_METRICS.md`.
+
+# Phase 6 operational endpoints
+
+| Method | Endpoint | Minimum role | Result |
+|---|---|---|---|
+| GET | `/health` | public | Liveness only. |
+| GET | `/ready` | public | Database readiness. |
+| GET | `/metrics` | public/internal network recommended | Prometheus text counters and latency gauge. |
+| GET | `/api/notifications` | VIEWER | Workspace/user notifications. |
+| POST | `/api/notifications` | ADMIN + CSRF | Idempotent notification creation. |
+| POST | `/api/notifications/{id}/read` | VIEWER + CSRF | Mark an authorized notification read. |
+| POST | `/api/exports` | ANALYST + CSRF | Create CSV/XLSX/PDF analytics-event export job. |
+| GET | `/api/exports` | VIEWER | Workspace export history. |
+| GET | `/api/exports/{id}` | VIEWER | Durable export status. |
+| GET | `/api/exports/{id}/download` | VIEWER | Authorized completed file download. |
+| GET | `/api/audit-logs` | ADMIN | Workspace audit records. |
+
+Export status is one of `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED`. Generated filenames and paths are server-owned.
+# Staging operations additions (Phase 6B)
+
+- `GET /health/live` — process liveness only; no dependency checks.
+- `GET /health/ready` — HTTP 200 only when PostgreSQL, Redis (staging/
+  production), and private object storage are healthy; otherwise HTTP 503 with
+  per-dependency booleans.
+- `POST /api/client-errors` — accepts a scrubbed frontend error message/page/
+  component and forwards it to the configured staging error monitor.
+- `POST /api/exports` — returns HTTP 202. In staging the response represents a
+  durable RQ job; poll `GET /api/exports/{id}` until `COMPLETED` or `FAILED`.
+- `GET /api/exports/{id}/download` — workspace-authorized download. S3 mode
+  returns a short-lived HTTP 307 signed URL; it never exposes a permanent public
+  object URL.
+- `POST /api/ingestion/jobs/{id}/import` — local/test remains synchronous;
+  staging/production returns `processing_mode: queued` and a durable job ID.
+- `POST /api/notifications` — idempotent DB creation followed by durable delivery;
+  repeated workspace/idempotency keys do not duplicate notifications.
+
+Queue submission failures use HTTP 503. Authorization and workspace scoping are
+evaluated before queueing; workers receive server-generated resource IDs and do
+not trust client file paths.

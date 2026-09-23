@@ -1,5 +1,3 @@
-import sqlite3
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -36,6 +34,7 @@ from backend.auth.security import (
 from backend.config import settings
 from backend.responses import success_response
 from data.auth_repository import AuthRepository
+from data.database import is_integrity_error
 
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
@@ -115,10 +114,12 @@ def register(
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except sqlite3.IntegrityError:
-        raise HTTPException(
-            status_code=409, detail="An account with this email already exists"
-        )
+    except Exception as exc:
+        if is_integrity_error(exc):
+            raise HTTPException(
+                status_code=409, detail="An account with this email already exists"
+            ) from exc
+        raise
     if payload.invitation_token:
         invited_workspace = repository.accept_invitation(
             payload.invitation_token, user["id"]

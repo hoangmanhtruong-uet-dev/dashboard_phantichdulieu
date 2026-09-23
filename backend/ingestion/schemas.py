@@ -8,10 +8,14 @@ CanonicalField = Literal[
     "timestamp",
     "revenue",
     "event_id",
+    "event_name",
+    "user_id",
     "customer_id",
+    "session_id",
     "category",
     "region",
     "source",
+    "device",
     "product",
     "currency",
     "is_conversion",
@@ -51,7 +55,7 @@ class ImportRequest(StrictModel):
         | None
     ) = None
     allow_partial: bool = False
-    fields: list[FieldMapping] = Field(min_length=2, max_length=10)
+    fields: list[FieldMapping] = Field(min_length=2, max_length=14)
 
     @model_validator(mode="after")
     def unique_mapping(self):
@@ -73,9 +77,27 @@ CANONICAL_SCHEMA = [
     },
     {
         "field": "revenue",
-        "required": True,
+        "required": False,
         "allowed_types": ["NUMBER", "CURRENCY"],
         "description": "Revenue amount",
+    },
+    {
+        "field": "event_name",
+        "required": False,
+        "allowed_types": ["STRING"],
+        "description": "Behavioral event name; defaults to purchase for legacy revenue files",
+    },
+    {
+        "field": "user_id",
+        "required": False,
+        "allowed_types": ["STRING"],
+        "description": "Stable analytics user identifier",
+    },
+    {
+        "field": "session_id",
+        "required": False,
+        "allowed_types": ["STRING"],
+        "description": "Session identifier required for exact funnels and conversion",
     },
     {
         "field": "event_id",
@@ -106,6 +128,12 @@ CANONICAL_SCHEMA = [
         "required": False,
         "allowed_types": ["STRING"],
         "description": "Acquisition or record source",
+    },
+    {
+        "field": "device",
+        "required": False,
+        "allowed_types": ["STRING"],
+        "description": "Device class",
     },
     {
         "field": "product",

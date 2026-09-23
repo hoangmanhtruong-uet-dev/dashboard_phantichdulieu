@@ -21,6 +21,16 @@ from backend.auth.router import router as auth_router, workspace_router
 from backend.errors import register_error_handlers
 from backend.ingestion.parser import IngestionError
 from backend.ingestion.router import router as ingestion_router
+from backend.analytics.router import router as analytics_router
+from backend.analytics.engine import AnalyticsEngine
+from backend.analytics.repository import AnalyticsRepository
+from backend.analytics.router import period as analytics_event_period
+from backend.operations.middleware import install_operational_middleware
+from backend.operations.router import router as operations_router
+from backend.infrastructure.monitoring import initialize_sentry
+from backend.infrastructure.queueing import JobQueue
+from backend.infrastructure.redis_client import close_redis, create_redis
+from backend.infrastructure.storage import create_storage
 from backend.query import PageSpec, query_meta
 from backend.responses import error_response, success_response
 from backend.schemas import (
@@ -32,6 +42,7 @@ from backend.schemas import (
     ReportCreate,
     SalesData,
 )
+from data.database import close_pools
 from data.migrate import run_migrations
 from data.auth_repository import AuthRepository
 from data.repositories import NexusRepository
@@ -41,7 +52,9 @@ from data.seeds import seed_demo_records
 BASE_DIR = Path(__file__).resolve().parent
 DB_FILE = settings.database_path
 
+initialize_sentry(settings.sentry_dsn, settings.app_env)
 app = FastAPI(title="Nexus Analytics API", version="1.0.0")
+install_operational_middleware(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -54,6 +67,8 @@ register_error_handlers(app)
 app.include_router(auth_router)
 app.include_router(workspace_router)
 app.include_router(ingestion_router)
+app.include_router(analytics_router)
+app.include_router(operations_router)
 
 
 @app.exception_handler(IngestionError)
@@ -77,12 +92,32 @@ def ensure_database():
 @app.on_event("startup")
 def initialize_application():
     app.state.database_path = DB_FILE
+    local_database = isinstance(DB_FILE, Path)
     app.state.upload_dir = (
         DB_FILE.parent / "uploads"
-        if settings.app_env == "test"
+        if settings.app_env == "test" and local_database
         else settings.upload_dir
     )
+    app.state.export_dir = (
+        DB_FILE.parent / "exports"
+        if settings.app_env == "test" and local_database
+        else settings.export_dir
+    )
+    app.state.export_dir.mkdir(parents=True, exist_ok=True)
+    app.state.redis = create_redis(settings.redis_url)
+    app.state.storage = create_storage(settings, app.state.upload_dir)
+    app.state.job_queue = JobQueue(
+        app.state.redis,
+        settings.queue_name,
+        synchronous=settings.app_env in {"development", "test"},
+    )
     ensure_database()
+
+
+@app.on_event("shutdown")
+def shutdown_application():
+    close_redis(getattr(app.state, "redis", None))
+    close_pools()
 
 
 def parse_date(value: str):
@@ -178,8 +213,9 @@ async def forecast_sales(
             "forecast": forecast,
         }
     except Exception as exc:
-        print(f"Forecast error: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(
+            status_code=500, detail="Forecast calculation failed"
+        ) from exc
 
 
 @app.post("/cluster", dependencies=[Depends(require_csrf)])
@@ -225,7 +261,9 @@ async def cluster_customers(
             "clusters": clusters,
         }
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(
+            status_code=500, detail="Segmentation calculation failed"
+        ) from exc
 
 
 @app.get("/health")
@@ -257,7 +295,7 @@ async def get_realtime_sales(context: AuthContext = Depends(require_viewer)):
         ]
         return {"success": True, "status": "success", "data": data}
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Realtime query failed") from exc
 
 
 @app.get("/api/anomalies")
@@ -319,8 +357,7 @@ async def check_anomalies(context: AuthContext = Depends(require_viewer)):
             "message": "Normal",
         }
     except Exception as exc:
-        print(f"Anomaly error: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail="Anomaly query failed") from exc
 
 
 def percentage_change(current: float, previous: float):
@@ -407,34 +444,33 @@ async def dashboard_overview(
     context: AuthContext = Depends(require_viewer),
 ):
     repository = get_repository()
-    current_start, latest = analytics_period(
-        repository, context.workspace_id, days, date_from, date_to
+    event_repository = AnalyticsRepository(DB_FILE)
+    current_start, latest = analytics_event_period(
+        event_repository, context.workspace_id, days, date_from, date_to
     )
     period_days = max(1, (latest.date() - current_start.date()).days + 1)
-    previous_end = current_start - timedelta(seconds=1)
-    previous_start = previous_end - timedelta(days=period_days - 1)
-    current = repository.period_stats(context.workspace_id, current_start, latest)
-    previous = repository.period_stats(
-        context.workspace_id, previous_start, previous_end
+    previous_end = current_start - timedelta(microseconds=1)
+    previous_start = previous_end - (latest - current_start)
+    current_events = event_repository.events(
+        context.workspace_id, current_start.isoformat(), latest.isoformat()
     )
-    trend_rows = repository.daily_revenue(context.workspace_id, current_start, latest)
-    source_rows = repository.revenue_grouped(
-        context.workspace_id, "category", current_start, latest
+    previous_events = event_repository.events(
+        context.workspace_id, previous_start.isoformat(), previous_end.isoformat()
     )
-    total_source = sum(row["revenue"] for row in source_rows) or 1
+    analytics = AnalyticsEngine().revenue(current_events, previous_events)
+    current = analytics["metrics"]
+    previous = analytics["previous_metrics"]
+    trend_rows = [
+        {"label": row["date"], "value": row["revenue"], "orders": row["purchases"]}
+        for row in analytics["daily"]
+    ]
+    source_rows = analytics["dimensions"]["source"]
+    total_source = sum(float(row["revenue"]) for row in source_rows) or 1
     unread_alerts = repository.count_unread_alerts(context.workspace_id)
     insights = repository.list_rows(
         "insights", context.workspace_id, order_by="id", limit=3
     )
 
-    sessions = max(current["orders_count"] * 12, current["users_count"] * 25)
-    previous_sessions = max(previous["orders_count"] * 12, previous["users_count"] * 25)
-    conversion = round((current["orders_count"] / sessions * 100), 2) if sessions else 0
-    previous_conversion = (
-        round((previous["orders_count"] / previous_sessions * 100), 2)
-        if previous_sessions
-        else 0
-    )
     data = {
         "period": {
             "days": period_days,
@@ -443,25 +479,23 @@ async def dashboard_overview(
         },
         "summary": {
             "revenue": round(current["revenue"], 2),
-            "revenue_change": percentage_change(
-                current["revenue"], previous["revenue"]
+            "revenue_change": analytics["change_percent"]["revenue"],
+            "users": current["active_users"],
+            "users_change": analytics["change_percent"]["active_users"],
+            "conversion": current["conversion_rate"],
+            "conversion_change": round(
+                current["conversion_rate"] - previous["conversion_rate"], 2
             ),
-            "users": current["users_count"],
-            "users_change": percentage_change(
-                current["users_count"], previous["users_count"]
-            ),
-            "conversion": conversion,
-            "conversion_change": round(conversion - previous_conversion, 2),
-            "sessions": sessions,
-            "sessions_change": percentage_change(sessions, previous_sessions),
-            "orders": current["orders_count"],
-            "average_order": round(current["average_order"], 2),
+            "sessions": current["sessions"],
+            "sessions_change": analytics["change_percent"]["sessions"],
+            "orders": current["purchases"],
+            "average_order": current["aov"],
             "unread_alerts": unread_alerts,
         },
         "trend": trend_rows,
         "traffic_sources": [
             {
-                "name": row["name"],
+                "name": row["value"],
                 "value": row["revenue"],
                 "share": round(row["revenue"] / total_source * 100, 1),
             }

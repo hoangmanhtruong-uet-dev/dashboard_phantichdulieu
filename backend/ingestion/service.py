@@ -1,10 +1,10 @@
 import hashlib
 import json
 import re
-import sqlite3
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+import tempfile
 from typing import Any, Iterator
 
 from fastapi import UploadFile
@@ -17,7 +17,9 @@ from backend.ingestion.parser import (
     iter_records,
 )
 from backend.ingestion.schemas import ImportRequest
+from backend.infrastructure.storage import LocalStorage
 from data.ingestion_repository import IngestionRepository
+from data.database import is_integrity_error
 
 
 ALLOWED_EXTENSIONS = {".csv": "CSV", ".xlsx": "XLSX"}
@@ -39,23 +41,28 @@ TYPE_RULES: dict[str, set[str]] = {
     "timestamp": {"DATE_TIME"},
     "revenue": {"NUMBER", "CURRENCY"},
     "event_id": {"STRING"},
+    "event_name": {"STRING"},
+    "user_id": {"STRING"},
     "customer_id": {"STRING"},
+    "session_id": {"STRING"},
     "category": {"STRING"},
     "region": {"STRING"},
     "source": {"STRING"},
+    "device": {"STRING"},
     "product": {"STRING"},
     "currency": {"STRING"},
     "is_conversion": {"BOOLEAN"},
 }
-REQUIRED_FIELDS = {"timestamp", "revenue"}
+REQUIRED_FIELDS = {"timestamp"}
 NUMBER_PATTERN = re.compile(r"^[-+]?(?:\d+(?:\.\d+)?|\.\d+)$")
 
 
 class IngestionService:
-    def __init__(self, repository: IngestionRepository, upload_dir: Path):
+    def __init__(self, repository: IngestionRepository, upload_dir):
         self.repository = repository
-        self.upload_dir = upload_dir.resolve()
-        self.upload_dir.mkdir(parents=True, exist_ok=True)
+        self.storage = (
+            LocalStorage(upload_dir) if isinstance(upload_dir, Path) else upload_dir
+        )
 
     async def upload(self, file: UploadFile, workspace_id: int, user_id: int) -> dict:
         original = self._safe_filename(file.filename or "")
@@ -76,12 +83,14 @@ class IngestionService:
             )
 
         job_id = uuid.uuid4().hex
-        stored_filename = f"{job_id}{suffix}"
-        destination = self._storage_path(stored_filename)
+        stored_filename = f"workspaces/{workspace_id}/imports/{job_id}{suffix}"
         digest = hashlib.sha256()
         size = 0
+        temporary = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+        destination = Path(temporary.name)
+        temporary.close()
         try:
-            with destination.open("xb") as handle:
+            with destination.open("wb") as handle:
                 while chunk := await file.read(64 * 1024):
                     size += len(chunk)
                     if size > settings.max_upload_bytes:
@@ -109,6 +118,7 @@ class IngestionService:
                     f"This file was already imported by job {completed['id']}",
                     409,
                 )
+            self.storage.put_file(destination, stored_filename, content_type)
             return self.repository.create_job(
                 {
                     "id": job_id,
@@ -137,7 +147,8 @@ class IngestionService:
                 409,
             )
         try:
-            preview = inspect_file(self._job_path(job), job["file_type"], sheet_name)
+            with self._job_file(job) as path:
+                preview = inspect_file(path, job["file_type"], sheet_name)
             updated = self.repository.save_preview(job_id, workspace_id, preview)
             if not updated:
                 raise IngestionError(
@@ -188,32 +199,36 @@ class IngestionService:
         error_batch: list[dict] = []
         seen_ids: set[str] = set()
         try:
-            for parsed in iter_records(
-                self._job_path(job), job["file_type"], selected_sheet
-            ):
-                row_count += 1
-                raw_json = json.dumps(parsed.values, ensure_ascii=False, sort_keys=True)
-                raw_batch.append(
-                    (
-                        parsed.row_number,
-                        raw_json,
-                        hashlib.sha256(raw_json.encode("utf-8")).hexdigest(),
+            with self._job_file(job) as import_path:
+                parsed_rows = iter_records(
+                    import_path, job["file_type"], selected_sheet
+                )
+                for parsed in parsed_rows:
+                    row_count += 1
+                    raw_json = json.dumps(
+                        parsed.values, ensure_ascii=False, sort_keys=True
                     )
-                )
-                _normalized, errors = self._validate_row(
-                    parsed, mapping, job_id, seen_ids
-                )
-                if errors:
-                    invalid_rows += 1
-                    error_batch.extend(errors)
-                else:
-                    valid_rows += 1
-                if len(raw_batch) >= 500:
-                    self.repository.add_raw_records(job_id, raw_batch)
-                    raw_batch.clear()
-                if len(error_batch) >= 500:
-                    self.repository.add_errors(job_id, error_batch)
-                    error_batch.clear()
+                    raw_batch.append(
+                        (
+                            parsed.row_number,
+                            raw_json,
+                            hashlib.sha256(raw_json.encode("utf-8")).hexdigest(),
+                        )
+                    )
+                    _normalized, errors = self._validate_row(
+                        parsed, mapping, job_id, seen_ids
+                    )
+                    if errors:
+                        invalid_rows += 1
+                        error_batch.extend(errors)
+                    else:
+                        valid_rows += 1
+                    if len(raw_batch) >= 500:
+                        self.repository.add_raw_records(job_id, raw_batch)
+                        raw_batch.clear()
+                    if len(error_batch) >= 500:
+                        self.repository.add_errors(job_id, error_batch)
+                        error_batch.clear()
             self.repository.add_raw_records(job_id, raw_batch)
             self.repository.add_errors(job_id, error_batch)
         except IngestionError as exc:
@@ -241,32 +256,35 @@ class IngestionService:
         seen_ids.clear()
 
         def normalized_rows() -> Iterator[tuple[int, dict]]:
-            for parsed in iter_records(
-                self._job_path(refreshed), refreshed["file_type"], selected_sheet
-            ):
-                normalized, errors = self._validate_row(
-                    parsed, mapping, job_id, seen_ids
-                )
-                if not errors and normalized:
-                    yield parsed.row_number, normalized
+            with self._job_file(refreshed) as import_path:
+                for parsed in iter_records(
+                    import_path, refreshed["file_type"], selected_sheet
+                ):
+                    normalized, errors = self._validate_row(
+                        parsed, mapping, job_id, seen_ids
+                    )
+                    if not errors and normalized:
+                        yield parsed.row_number, normalized
 
         try:
             result = self.repository.complete_import(
                 refreshed, payload.display_name, normalized_rows(), valid_rows
             )
-        except sqlite3.IntegrityError as exc:
-            self.repository.fail_processing(
-                job_id, workspace_id, "A duplicate completed import already exists"
-            )
-            raise IngestionError(
-                "DUPLICATE_IMPORT", "This file has already been imported", 409
-            ) from exc
         except IngestionError:
             self.repository.fail_processing(
                 job_id, workspace_id, "The file became invalid during processing"
             )
             raise
         except Exception as exc:
+            if is_integrity_error(exc):
+                self.repository.fail_processing(
+                    job_id,
+                    workspace_id,
+                    "A duplicate completed import already exists",
+                )
+                raise IngestionError(
+                    "DUPLICATE_IMPORT", "This file has already been imported", 409
+                ) from exc
             self.repository.fail_processing(
                 job_id, workspace_id, "Import processing failed"
             )
@@ -297,6 +315,11 @@ class IngestionService:
             raise IngestionError(
                 "MISSING_REQUIRED_MAPPING",
                 f"Required canonical mappings are missing: {', '.join(missing)}",
+            )
+        if "event_name" not in mapped and "revenue" not in mapped:
+            raise IngestionError(
+                "MISSING_EVENT_OR_REVENUE_MAPPING",
+                "Map event_name for behavioral events or revenue for legacy purchase data",
             )
         unknown = sorted({field.source_column for field in payload.fields} - available)
         if unknown:
@@ -393,6 +416,35 @@ class IngestionService:
                 seen_ids.add(event_id)
             else:
                 normalized["event_id"] = f"{job_id}-{parsed.row_number}"
+            normalized.setdefault(
+                "event_name", "purchase" if "revenue" in mapping else None
+            )
+            if not normalized.get("event_name"):
+                errors.append(
+                    self._row_error(
+                        parsed.row_number,
+                        "event_name",
+                        "MISSING_REQUIRED",
+                        "An event name is required",
+                        normalized.get("event_name"),
+                    )
+                )
+            if (
+                normalized.get("event_name") == "purchase"
+                and "revenue" in mapping
+                and normalized.get("revenue") is None
+            ):
+                errors.append(
+                    self._row_error(
+                        parsed.row_number,
+                        "revenue",
+                        "MISSING_REQUIRED",
+                        "A mapped purchase revenue value is required",
+                        normalized.get("revenue"),
+                    )
+                )
+            if normalized.get("revenue") is None:
+                normalized["revenue"] = 0.0
             normalized.setdefault("is_conversion", True)
         return (normalized if not errors else None), errors
 
@@ -430,12 +482,18 @@ class IngestionService:
             return float(text)
         if data_type == "DATE_TIME":
             if isinstance(value, datetime):
-                return value.isoformat()
+                parsed = value
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return parsed.astimezone(timezone.utc).isoformat()
             if not isinstance(value, str):
                 raise ValueError
             text = value.strip()
             try:
-                return datetime.fromisoformat(text.replace("Z", "+00:00")).isoformat()
+                parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return parsed.astimezone(timezone.utc).isoformat()
             except ValueError:
                 for fmt in (
                     "%Y-%m-%d",
@@ -445,7 +503,11 @@ class IngestionService:
                     "%Y-%m-%d %H:%M:%S",
                 ):
                     try:
-                        return datetime.strptime(text, fmt).isoformat()
+                        return (
+                            datetime.strptime(text, fmt)
+                            .replace(tzinfo=timezone.utc)
+                            .isoformat()
+                        )
                     except ValueError:
                         continue
                 raise ValueError
@@ -469,21 +531,13 @@ class IngestionService:
             raise IngestionError("INVALID_FILENAME", "The uploaded filename is invalid")
         return name
 
-    def _storage_path(self, stored_filename: str) -> Path:
-        candidate = (self.upload_dir / stored_filename).resolve()
-        if candidate.parent != self.upload_dir:
-            raise IngestionError(
-                "UNSAFE_PATH", "The generated upload path is invalid", 400
-            )
-        return candidate
-
-    def _job_path(self, job: dict) -> Path:
-        path = self._storage_path(job["stored_filename"])
-        if not path.is_file():
+    def _job_file(self, job: dict):
+        try:
+            return self.storage.materialize(job["stored_filename"])
+        except (FileNotFoundError, ValueError) as exc:
             raise IngestionError(
                 "UPLOAD_NOT_FOUND", "The stored upload is unavailable", 404
-            )
-        return path
+            ) from exc
 
     def _job(self, job_id: str, workspace_id: int) -> dict:
         job = self.repository.get_job(job_id, workspace_id)
